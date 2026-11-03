@@ -65,11 +65,11 @@ namespace TradingEmpire.Terminal
 
         static Vector2 P(ChartMap m, Anchor a) { return new Vector2(m.X(a.Time), m.Y(a.Price)); }
 
-        static void Line(DrawingScene s, Vector2 a, Vector2 b, Drawing d, bool selected, float alpha = 1f, bool? dashed = null, bool? dotted = null)
+        static void Line(DrawingScene s, Vector2 a, Vector2 b, Drawing d, bool selected, float alpha = 1f, bool? dashed = null, bool? dotted = null, string colorOverride = null)
         {
             s.Lines.Add(new SceneLine
             {
-                A = a, B = b, Color = Parse(d.Color, alpha), Width = (float)d.Width + (selected ? 0.7f : 0f), DrawingId = d.Id,
+                A = a, B = b, Color = Parse(colorOverride ?? d.Color, alpha), Width = (float)d.Width + (selected ? 0.7f : 0f), DrawingId = d.Id,
                 Dashed = dashed ?? d.Dash == "dashed", Dotted = dotted ?? d.Dash == "dotted",
             });
         }
@@ -173,7 +173,7 @@ namespace TradingEmpire.Terminal
                     var a = P(m, d.GetAnchor("a").Value); var b = P(m, d.GetAnchor("b").Value);
                     var c1 = new Vector2(a.x, b.y); var c2 = new Vector2(b.x, a.y);
                     Line(s, a, c1, d, selected); Line(s, c1, b, d, selected); Line(s, b, c2, d, selected); Line(s, c2, a, d, selected);
-                    if (d.Str("fill") == null || d.Flag("fill")) s.Fills.Add(new SceneFill { Points = new[] { a, c1, b, c2 }, Color = Parse(d.Color, 0.12f), DrawingId = d.Id });
+                    if (d.Opt("fill")) s.Fills.Add(new SceneFill { Points = new[] { a, c1, b, c2 }, Color = Parse(d.Color, 0.12f), DrawingId = d.Id });
                     break;
                 }
                 case "ellipse":
@@ -201,17 +201,17 @@ namespace TradingEmpire.Terminal
                     var C = ext ? d.GetAnchor("c").Value : B;
                     long left = ext ? C.Time : Math.Min(A.Time, B.Time);
                     float x0 = m.X(left);
-                    float x1 = d.Str("extend") == null || d.Flag("extend") ? plot.xMax : m.X(Math.Max(A.Time, B.Time));
-                    var levels = DrawingKinds.FibLevelsOf(d);
+                    float x1 = d.Opt("extend") ? plot.xMax : m.X(Math.Max(A.Time, B.Time));
                     float prevY = float.NaN;
-                    foreach (double lv in levels.OrderBy(l => l))
+                    foreach (var fl in DrawingKinds.FibLevelsOn(d))
                     {
+                        double lv = fl.V; string lc = fl.Color;
                         double price = ext ? DrawingKinds.FibExtPrice(A.Price, B.Price, C.Price, lv) : DrawingKinds.FibPrice(A.Price, B.Price, lv);
                         float y = m.Y(price);
-                        Line(s, new Vector2(x0, y), new Vector2(x1, y), d, selected, lv == 0 || lv == 1 ? 0.9f : 0.6f);
-                        string text = lv.ToString("0.###", CultureInfo.InvariantCulture) + "  " + Price(m, price);
-                        s.Labels.Add(new SceneLabel { At = new Vector2(x0 + 4, y + 8), Text = text, Color = Parse(d.Color), Anchor = TextAnchor.MiddleLeft, DrawingId = d.Id });
-                        if (!float.IsNaN(prevY) && (d.Str("fill") == null || d.Flag("fill")))
+                        Line(s, new Vector2(x0, y), new Vector2(x1, y), d, selected, lv == 0 || lv == 1 ? 0.9f : 0.6f, null, null, lc);
+                        string text = (d.Opt("showLevel") ? lv.ToString("0.###", CultureInfo.InvariantCulture) : "") + (d.Opt("showLevel") && d.Opt("showPrice") ? "  " : "") + (d.Opt("showPrice") ? Price(m, price) : "");
+                        if (text.Length > 0) s.Labels.Add(new SceneLabel { At = new Vector2(x0 + 4, y + 8), Text = text, Color = Parse(lc ?? d.Color), Anchor = TextAnchor.MiddleLeft, DrawingId = d.Id });
+                        if (!float.IsNaN(prevY) && (d.Opt("fill")))
                             s.Fills.Add(new SceneFill { Points = new[] { new Vector2(x0, prevY), new Vector2(x1, prevY), new Vector2(x1, y), new Vector2(x0, y) }, Color = Parse(d.Color, 0.05f), DrawingId = d.Id });
                         prevY = y;
                     }
@@ -277,7 +277,7 @@ namespace TradingEmpire.Terminal
                     float devs = (float)(d.Num("devs") ?? 2);
                     float x0 = pts[0].x, x1 = pts[n - 1].x;
                     Vector2 U0 = new Vector2(x0, at(x0) + devs * sd), U1 = new Vector2(x1, at(x1) + devs * sd), L0 = new Vector2(x0, at(x0) - devs * sd), L1 = new Vector2(x1, at(x1) - devs * sd);
-                    if (d.Str("fill") == null || d.Flag("fill")) s.Fills.Add(new SceneFill { Points = new[] { U0, U1, L1, L0 }, Color = Parse(d.Color, 0.12f), DrawingId = d.Id });
+                    if (d.Opt("fill")) s.Fills.Add(new SceneFill { Points = new[] { U0, U1, L1, L0 }, Color = Parse(d.Color, 0.12f), DrawingId = d.Id });
                     Line(s, new Vector2(x0, at(x0)), new Vector2(x1, at(x1)), d, selected, 0.8f, true, false);
                     Line(s, U0, U1, d, selected); Line(s, L0, L1, d, selected);
                     break;
@@ -314,17 +314,18 @@ namespace TradingEmpire.Terminal
                     float k = Mathf.Approximately(b.x, a.x) ? 0 : (b.y - a.y) / (b.x - a.x);
                     float off = c.y - (a.y + k * (c.x - a.x));
                     Line(s, a, b, d, selected, 0.7f, true, false);
-                    bool extend = d.Str("extend") == null || d.Flag("extend");
+                    bool extend = d.Opt("extend");
                     var lines = new List<(Vector2 a, Vector2 b)>();
-                    foreach (double lv in DrawingKinds.FibLevelsOf(d).OrderBy(l => l))
+                    foreach (var fl in DrawingKinds.FibLevelsOn(d))
                     {
+                        double lv = fl.V; string lc = fl.Color;
                         var p0 = new Vector2(a.x, a.y + off * (float)lv); var p1 = new Vector2(b.x, b.y + off * (float)lv);
                         var (e0, e1) = extend ? Extend(p0, p1, plot, true, false) : (p0, p1);
-                        Line(s, e0, e1, d, selected, lv == 0 || lv == 1 ? 0.95f : 0.65f);
-                        s.Labels.Add(new SceneLabel { At = new Vector2(Mathf.Min(e1.x, plot.xMax) - 40, e1.y + 8), Text = lv.ToString("0.###", CultureInfo.InvariantCulture), Color = Parse(d.Color), Anchor = TextAnchor.MiddleLeft, DrawingId = d.Id });
+                        Line(s, e0, e1, d, selected, lv == 0 || lv == 1 ? 0.95f : 0.65f, null, null, lc);
+                        if (d.Opt("showLevel")) s.Labels.Add(new SceneLabel { At = new Vector2(Mathf.Min(e1.x, plot.xMax) - 40, e1.y + 8), Text = lv.ToString("0.###", CultureInfo.InvariantCulture), Color = Parse(lc ?? d.Color), Anchor = TextAnchor.MiddleLeft, DrawingId = d.Id });
                         lines.Add((e0, e1));
                     }
-                    if (d.Str("fill") == null || d.Flag("fill"))
+                    if (d.Opt("fill"))
                         for (int i = 0; i + 1 < lines.Count; i += 2) s.Fills.Add(new SceneFill { Points = new[] { lines[i].a, lines[i].b, lines[i + 1].b, lines[i + 1].a }, Color = Parse(d.Color, 0.06f), DrawingId = d.Id });
                     break;
                 }
@@ -334,12 +335,13 @@ namespace TradingEmpire.Terminal
                     float unit = b.x - a.x;
                     Line(s, a, b, d, selected, 0.5f, true, false);
                     if (Mathf.Abs(unit) < 1f) break;
-                    foreach (double lv in DrawingKinds.FibLevelsOf(d).OrderBy(l => l))
+                    foreach (var fl in DrawingKinds.FibLevelsOn(d))
                     {
+                        double lv = fl.V; string lc = fl.Color;
                         float x = Mathf.Round(a.x + unit * (float)lv) + 0.5f;
                         if (x < plot.xMin - 2000 || x > plot.xMax + 2000) continue;
-                        Line(s, new Vector2(x, plot.yMin), new Vector2(x, plot.yMax), d, selected, lv == 0 || lv == 1 ? 0.9f : 0.55f);
-                        s.Labels.Add(new SceneLabel { At = new Vector2(x + 4, plot.yMax - 10), Text = lv.ToString("0.###", CultureInfo.InvariantCulture), Color = Parse(d.Color), Anchor = TextAnchor.MiddleLeft, DrawingId = d.Id });
+                        Line(s, new Vector2(x, plot.yMin), new Vector2(x, plot.yMax), d, selected, lv == 0 || lv == 1 ? 0.9f : 0.55f, null, null, lc);
+                        if (d.Opt("showLevel")) s.Labels.Add(new SceneLabel { At = new Vector2(x + 4, plot.yMax - 10), Text = lv.ToString("0.###", CultureInfo.InvariantCulture), Color = Parse(lc ?? d.Color), Anchor = TextAnchor.MiddleLeft, DrawingId = d.Id });
                     }
                     break;
                 }
@@ -349,17 +351,17 @@ namespace TradingEmpire.Terminal
                     float dx = b.x - a.x;
                     if (Mathf.Abs(dx) < 1e-3f) { Line(s, a, b, d, selected); break; }
                     Line(s, new Vector2(b.x, a.y), b, d, selected, 0.5f, false, true);
-                    var ends = new List<(double lv, Vector2 end)>();
-                    foreach (double lv in DrawingKinds.FibLevelsOf(d).OrderBy(l => l))
-                        ends.Add((lv, RayEnd(a, new Vector2(dx, (b.y - a.y) * (float)lv), plot)));
+                    var ends = new List<(double lv, Vector2 end, string color)>();
+                    foreach (var fl in DrawingKinds.FibLevelsOn(d))
+                        ends.Add((fl.V, RayEnd(a, new Vector2(dx, (b.y - a.y) * (float)fl.V), plot), fl.Color));
                     for (int i = 0; i < ends.Count; i++)
                     {
-                        if ((d.Str("fill") == null || d.Flag("fill")) && i + 1 < ends.Count && i % 2 == 0)
+                        if ((d.Opt("fill")) && i + 1 < ends.Count && i % 2 == 0)
                             s.Fills.Add(new SceneFill { Points = new[] { a, ends[i].end, ends[i + 1].end }, Color = Parse(d.Color, 0.07f), DrawingId = d.Id });
-                        Line(s, a, ends[i].end, d, selected, ends[i].lv == 1 ? 1f : 0.65f);
+                        Line(s, a, ends[i].end, d, selected, ends[i].lv == 1 ? 1f : 0.65f, null, null, ends[i].color);
                         var e = ends[i].end;
                         float lx = Mathf.Clamp(e.x, plot.xMin + 24, plot.xMax - 4);
-                        s.Labels.Add(new SceneLabel { At = new Vector2(lx - 30, a.y + (e.y - a.y) / (Mathf.Abs(e.x - a.x) < 1e-3f ? 1f : e.x - a.x) * (lx - a.x) + 8), Text = ends[i].lv.ToString("0.###", CultureInfo.InvariantCulture), Color = Parse(d.Color), Anchor = TextAnchor.MiddleLeft, DrawingId = d.Id });
+                        if (d.Opt("showLevel")) s.Labels.Add(new SceneLabel { At = new Vector2(lx - 30, a.y + (e.y - a.y) / (Mathf.Abs(e.x - a.x) < 1e-3f ? 1f : e.x - a.x) * (lx - a.x) + 8), Text = ends[i].lv.ToString("0.###", CultureInfo.InvariantCulture), Color = Parse(ends[i].color ?? d.Color), Anchor = TextAnchor.MiddleLeft, DrawingId = d.Id });
                     }
                     break;
                 }
@@ -369,8 +371,9 @@ namespace TradingEmpire.Terminal
                     float R = Vector2.Distance(a, b), ang = Mathf.Atan2(b.y - a.y, b.x - a.x);
                     Line(s, a, b, d, selected, 0.6f, true, false);
                     if (R < 1f) break;
-                    foreach (double lv in DrawingKinds.FibLevelsOf(d).OrderBy(l => l))
+                    foreach (var fl in DrawingKinds.FibLevelsOn(d))
                     {
+                        double lv = fl.V; string lc = fl.Color;
                         float r = R * (float)lv;
                         float alpha = lv == 1 ? 0.95f : 0.65f;
                         const int Steps = 36;
@@ -379,10 +382,10 @@ namespace TradingEmpire.Terminal
                         {
                             float t = ang - Mathf.PI / 2 + Mathf.PI * i / Steps;
                             var q = b + new Vector2(Mathf.Cos(t), Mathf.Sin(t)) * r;
-                            if (i > 0) Line(s, prev, q, d, selected, alpha);
+                            if (i > 0) Line(s, prev, q, d, selected, alpha, null, null, lc);
                             prev = q;
                         }
-                        s.Labels.Add(new SceneLabel { At = b + new Vector2(Mathf.Cos(ang), Mathf.Sin(ang)) * r + new Vector2(4, 8), Text = lv.ToString("0.###", CultureInfo.InvariantCulture), Color = Parse(d.Color), Anchor = TextAnchor.MiddleLeft, DrawingId = d.Id });
+                        if (d.Opt("showLevel")) s.Labels.Add(new SceneLabel { At = b + new Vector2(Mathf.Cos(ang), Mathf.Sin(ang)) * r + new Vector2(4, 8), Text = lv.ToString("0.###", CultureInfo.InvariantCulture), Color = Parse(lc ?? d.Color), Anchor = TextAnchor.MiddleLeft, DrawingId = d.Id });
                     }
                     break;
                 }

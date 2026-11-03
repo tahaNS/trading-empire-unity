@@ -29,6 +29,8 @@ namespace TradingEmpire.Core
         public string Dash { get { return Str("dash") ?? "solid"; } }
         public bool Locked { get { return Flag("locked"); } }
         public bool Hidden { get { return Flag("hidden"); } }
+        /// <summary>An on / off option that is on unless it was explicitly set to false (for example "extend", "fill", "showLevel").</summary>
+        public bool Opt(string key) { var v = Data.Get(key); return v == null || v.Kind != JsonKind.Bool || v.Bool; }
         public string Name { get { return Str("name"); } }
         public string Text { get { return Str("text"); } }
 
@@ -87,12 +89,56 @@ namespace TradingEmpire.Core
         }
 
         /// <summary>The levels a Fibonacci drawing shows (on ones): its own list, or the defaults.</summary>
-        public static List<double> FibLevelsOf(Drawing d)
+        public static List<double> FibLevelsOf(Drawing d) { return FibLevelDefs(d).Where(l => l.On).Select(l => l.V).ToList(); }
+
+        /// <summary>One line of a Fibonacci drawing: its value, whether it is shown, and an optional colour of its own.</summary>
+        public sealed class FibLevel
+        {
+            public double V;
+            public bool On = true;
+            public string Color;
+        }
+
+        /// <summary>Every level of a Fibonacci drawing, shown or not (its own list, or the defaults), in the order the player keeps them.</summary>
+        public static List<FibLevel> FibLevelDefs(Drawing d)
         {
             var own = d.Data.Get("levels");
-            if (own != null && own.Kind == JsonKind.Array && own.Array.Count > 0)
-                return own.Array.Where(l => l.Get("on") == null || l.Get("on").Kind != JsonKind.Bool || l.Get("on").Bool).Select(l => l.Get("v").AsDouble()).ToList();
-            return DefaultFibValues(d.Kind).ToList();
+            var list = new List<FibLevel>();
+            if (own != null && own.Kind == JsonKind.Array)
+            {
+                foreach (var l in own.Array)
+                {
+                    if (l.Kind != JsonKind.Object || l.Get("v") == null || l.Get("v").Kind != JsonKind.Number) continue;
+                    var on = l.Get("on"); var col = l.Get("color");
+                    list.Add(new FibLevel { V = l.Get("v").Number, On = on == null || on.Kind != JsonKind.Bool || on.Bool, Color = col != null && col.Kind == JsonKind.String ? col.String : null });
+                }
+            }
+            if (own != null && own.Kind == JsonKind.Array) return list; // the player's own list, even when every level was removed
+            foreach (double v in DefaultFibValues(d.Kind)) list.Add(new FibLevel { V = v });
+            return list;
+        }
+
+        /// <summary>The levels that are switched on, lowest first.</summary>
+        public static List<FibLevel> FibLevelsOn(Drawing d) { return FibLevelDefs(d).Where(l => l.On).OrderBy(l => l.V).ToList(); }
+
+        /// <summary>Store the levels on the drawing exactly as the web version does ({v, on, color?}).</summary>
+        public static void SetFibLevels(Drawing d, IEnumerable<FibLevel> levels)
+        {
+            var arr = JsonValue.Arr();
+            foreach (var l in levels)
+            {
+                var o = JsonValue.Obj().Set("v", l.V).Set("on", l.On);
+                if (!string.IsNullOrEmpty(l.Color)) o.Set("color", l.Color);
+                arr.Add(o);
+            }
+            d.Data.Set("levels", arr);
+        }
+
+        /// <summary>The next level to offer when one is added: half a step above the highest value.</summary>
+        public static double NextLevelValue(IEnumerable<FibLevel> levels)
+        {
+            double top = 0; foreach (var l in levels) top = Math.Max(top, l.V);
+            return Math.Round((top + 0.5) * 1000) / 1000;
         }
 
         public static bool IsFib(string kind) { return kind.StartsWith("fib", StringComparison.Ordinal); }

@@ -65,6 +65,8 @@ namespace TradingEmpire.Terminal
         readonly List<Text> _indLabels = new List<Text>();
         IndicatorPanel _indicatorPanel;
         ObjectPanel _objectPanel;
+        FibPanel _fibPanel;
+        Button _levelsButton;
         /// <summary>Raised when the auto-scale state or the number of indicators changes, so the terminal can relabel its buttons.</summary>
         public Action StateChanged;
         /// <summary>Set by the terminal: switches between the chart with its panels and the chart alone.</summary>
@@ -78,8 +80,8 @@ namespace TradingEmpire.Terminal
             if (StateChanged != null) StateChanged();
             _graphic.SetVerticesDirty();
         }
-        public void ToggleIndicatorPanel() { _objectPanel.Show(false); _indicatorPanel.Toggle(); if (StateChanged != null) StateChanged(); }
-        public void ToggleObjectPanel() { _indicatorPanel.Show(false); _objectPanel.Toggle(); if (StateChanged != null) StateChanged(); }
+        public void ToggleIndicatorPanel() { _objectPanel.Show(false); _fibPanel.gameObject.SetActive(false); _indicatorPanel.Toggle(); if (StateChanged != null) StateChanged(); }
+        public void ToggleObjectPanel() { _indicatorPanel.Show(false); _fibPanel.gameObject.SetActive(false); _objectPanel.Toggle(); if (StateChanged != null) StateChanged(); }
         public bool IndicatorPanelOpen { get { return _indicatorPanel.Visible; } }
         public bool ObjectPanelOpen { get { return _objectPanel.Visible; } }
         public int IndicatorCount { get { return _session != null ? _session.Indicators.Items.Count : 0; } }
@@ -140,6 +142,7 @@ namespace TradingEmpire.Terminal
             view.BuildProps();
             view._indicatorPanel = IndicatorPanel.Create(rt);
             view._objectPanel = ObjectPanel.Create(rt, view);
+            view._fibPanel = FibPanel.Create(rt);
             return view;
         }
 
@@ -157,6 +160,7 @@ namespace TradingEmpire.Terminal
             _session.Indicators.Changed += OnIndicatorsChanged;
             if (_indicatorPanel != null) _indicatorPanel.Bind(session);
             if (_objectPanel != null) _objectPanel.Bind(session);
+            if (_fibPanel != null) _fibPanel.Bind(session);
             _tool = null;
             _pending.Clear();
             _selectedId = null;
@@ -322,7 +326,7 @@ namespace TradingEmpire.Terminal
         void BuildProps()
         {
             _props = Ui.Rect(_root, "DrawingProps");
-            Ui.Place(_props, new Vector2(0.5f, 0), new Vector2(0.5f, 0), new Vector2(-250, 34), new Vector2(250, 68));
+            Ui.Place(_props, new Vector2(0.5f, 0), new Vector2(0.5f, 0), new Vector2(-290, 34), new Vector2(290, 68));
             Ui.Panel(_props, "Bg", new Color(0.09f, 0.12f, 0.17f, 0.97f)).rectTransform.SetAsFirstSibling();
             Ui.Stretch((RectTransform)_props.Find("Bg"));
             float x = 6;
@@ -353,6 +357,9 @@ namespace TradingEmpire.Terminal
             x += 48;
             var del = Ui.Button(_props, "Del", DeleteSelected, new Color(0.45f, 0.18f, 0.2f), 10);
             Ui.Place((RectTransform)del.transform, new Vector2(0, 0), new Vector2(0, 1), new Vector2(x, 6), new Vector2(x + 40, -6));
+            x += 44;
+            _levelsButton = Ui.Button(_props, "Levels", () => { var sel = SelectedDrawing(); if (sel != null && _fibPanel != null) _fibPanel.Toggle(sel.Id); }, Theme.PanelAlt, 10);
+            Ui.Place((RectTransform)_levelsButton.transform, new Vector2(0, 0), new Vector2(0, 1), new Vector2(x, 6), new Vector2(x + 52, -6));
             _props.gameObject.SetActive(false);
 
             // a text field for the text of a text note, and a button to send a position box to the order panel
@@ -397,7 +404,12 @@ namespace TradingEmpire.Terminal
             _propsDirty = true;
         }
 
-        public void Select(string id) { _selectedId = id; _propsDirty = true; }
+        public void Select(string id)
+        {
+            _selectedId = id; _propsDirty = true;
+            if (_fibPanel != null) { var d = id != null && _session != null ? _session.Drawings.Items.FirstOrDefault(x => x.Id == id) : null; if (d != null && DrawingKinds.IsFib(d.Kind)) { _indicatorPanel.Show(false); _objectPanel.Show(false); } _fibPanel.OnSelect(id); }
+        }
+        public FibPanel FibWindow { get { return _fibPanel; } }
 
         void RefreshProps()
         {
@@ -407,6 +419,7 @@ namespace TradingEmpire.Terminal
             _props.gameObject.SetActive(d != null);
             _textField.gameObject.SetActive(d != null && d.Kind == "text");
             _planButton.gameObject.SetActive(d != null && d.Kind == "position");
+            if (_levelsButton != null) _levelsButton.gameObject.SetActive(d != null && DrawingKinds.IsFib(d.Kind));
             if (d == null) return;
             _widthLabel.text = d.Width.ToString("0.0", CultureInfo.InvariantCulture);
             Ui.SetButtonColor(_lockButton, d.Locked ? Theme.Blue : Theme.PanelAlt);

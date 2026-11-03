@@ -671,5 +671,44 @@ namespace TradingEmpire.PlayModeTests
             yield return null;
             Assert.AreEqual(1, _app.World.Trading.State.Positions.Count);
         }
+
+        [UnityTest]
+        public IEnumerator Fibonacci_levels_can_be_edited_added_switched_off_and_deleted()
+        {
+            _app = GameApp.Create(null, false, true);
+            yield return null;
+            Find("Open Terminal").onClick.Invoke();
+            yield return null;
+            for (int i = 0; i < 80; i++) _app.World.Trading.Step();
+            var ds = _app.World.Trading.Drawings;
+            var bars = _app.World.Trading.ChartData().Candles;
+            string id = ds.Add(DrawingKinds.Make("fib", "#6ea8ff", ("a", new Anchor(bars[10].Time, bars[10].Low)), ("b", new Anchor(bars[60].Time, bars[60].High))));
+            var chart = _app.Terminal.Chart;
+            chart.Select(id);
+            yield return null;
+            Assert.IsTrue(chart.FibWindow.Visible, "the levels panel did not open for a Fibonacci drawing");
+            yield return null;
+            Assert.AreEqual(7, DrawingKinds.FibLevelsOf(ds.Get(id)).Count);
+            Find("+ Add level").onClick.Invoke();
+            yield return null;
+            Assert.AreEqual(8, DrawingKinds.FibLevelsOf(ds.Get(id)).Count);
+            // switch the first level off with its dot, then delete one with its x
+            var dots = LiveButtons().Where(b => LabelOf(b) == "*").ToArray();
+            dots[0].onClick.Invoke();
+            yield return null;
+            Assert.AreEqual(7, DrawingKinds.FibLevelsOf(ds.Get(id)).Count);
+            Assert.AreEqual(8, DrawingKinds.FibLevelDefs(ds.Get(id)).Count);
+            var kill = LiveButtons().Where(b => LabelOf(b) == "x" && b.transform.parent == chart.FibWindow.transform.Find("Viewport/Content")).ToArray();
+            kill[0].onClick.Invoke();
+            yield return null;
+            Assert.AreEqual(7, DrawingKinds.FibLevelDefs(ds.Get(id)).Count);
+            Find("Reset levels").onClick.Invoke();
+            yield return null;
+            Assert.AreEqual(7, DrawingKinds.FibLevelsOf(ds.Get(id)).Count);
+            // a different selection closes the panel
+            chart.Select(null);
+            yield return null;
+            Assert.IsFalse(chart.FibWindow.Visible);
+        }
     }
 }

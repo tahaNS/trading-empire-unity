@@ -157,6 +157,13 @@ namespace TradingEmpire.EditorTools
                 s.Drawings.Add(DrawingKinds.Make("fibarcs", "#c792ea", ("a", new Anchor(bars[n - 40].Time, bars[n - 40].Low)), ("b", new Anchor(bars[n - 15].Time, bars[n - 15].High))));
             }
             Shot(app, cam, rt, prefix + "-drawings.png");
+            {
+                var fibId = s.Drawings.Items.First(x => x.Kind == "fibchannel").Id;
+                app.Terminal.Chart.Select(fibId);
+                app.Terminal.Chart.FibWindow.RefreshNow();
+                Shot(app, cam, rt, prefix + "-fib-levels.png");
+                app.Terminal.Chart.Select(null);
+            }
             app.Terminal.Chart.ObjectWindow.Show(true);
             app.Terminal.Chart.ObjectWindow.RefreshNow();
             Shot(app, cam, rt, prefix + "-objects.png");
