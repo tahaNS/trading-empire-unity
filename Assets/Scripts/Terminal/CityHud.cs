@@ -16,7 +16,7 @@ namespace TradingEmpire.Terminal
     {
         GameWorld _world;
         CityGame City { get { return _world.City; } }
-        Action _openTerminal;
+        Action _openTerminal, _openMenu;
 
         Text _date, _treasury, _net, _chips, _toast;
         readonly List<Button> _speedButtons = new List<Button>();
@@ -34,13 +34,14 @@ namespace TradingEmpire.Terminal
         int _lastToast;
         string _inspectedId;
 
-        public static CityHud Build(Transform canvas, GameWorld world, Action openTerminal)
+        public static CityHud Build(Transform canvas, GameWorld world, Action openTerminal, Action openMenu = null)
         {
             var root = Ui.Rect(canvas, "CityHud");
             Ui.Stretch(root);
             var hud = root.gameObject.AddComponent<CityHud>();
             hud._world = world;
             hud._openTerminal = openTerminal;
+            hud._openMenu = openMenu;
             hud.BuildUi(root);
             world.City.Changed += hud.MarkDirty;
             world.Clock.ViewChanged += hud.MarkDirty;
@@ -85,6 +86,7 @@ namespace TradingEmpire.Terminal
             Ui.Place(_chips.rectTransform, Vector2.zero, new Vector2(0, 1), new Vector2(x + 520, 0), new Vector2(x + 760, 0));
 
             float rx = -10;
+            if (_openMenu != null) AddRight(bar, "Menu", ref rx, 70, () => _openMenu());
             AddRight(bar, "Terminal", ref rx, 96, () => _openTerminal());
             AddRight(bar, "Transfer", ref rx, 90, () => Toggle(_transferPanel, _policyPanel));
             AddRight(bar, "Policies", ref rx, 86, () => Toggle(_policyPanel, _transferPanel));

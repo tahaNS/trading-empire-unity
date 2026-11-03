@@ -157,7 +157,7 @@ namespace TradingEmpire.Terminal
 
         void RebuildLand()
         {
-            if (_ownedPlane != null) Destroy(_ownedPlane);
+            if (_ownedPlane != null) Ui.Kill(_ownedPlane);
             var a = City.Grid.Buildable;
             var (x0, z0) = City.Grid.CellToWorld(new Cell(a.X, a.Y));
             float cx = x0 + (a.W - 1) / 2f, cz = z0 + (a.H - 1) / 2f;
@@ -188,7 +188,7 @@ namespace TradingEmpire.Terminal
         {
             var state = City.State;
             var live = new HashSet<string>(state.Buildings.Select(b => b.Id));
-            foreach (var id in _views.Keys.Where(id => !live.Contains(id)).ToList()) { Destroy(_views[id]); _views.Remove(id); _signature.Remove(id); }
+            foreach (var id in _views.Keys.Where(id => !live.Contains(id)).ToList()) { Ui.Kill(_views[id]); _views.Remove(id); _signature.Remove(id); }
             foreach (var b in state.Buildings)
             {
                 bool fire = state.Events.Any(e => e.Kind == EventKind.Fire && e.BuildingId == b.Id);
@@ -196,7 +196,7 @@ namespace TradingEmpire.Terminal
                 string sig = SignatureOf(b, state.Record, fire);
                 if (b.Status == BuildStatus.Building || !_signature.TryGetValue(b.Id, out var old) || old != sig)
                 {
-                    if (_views.TryGetValue(b.Id, out var prev)) Destroy(prev);
+                    if (_views.TryGetValue(b.Id, out var prev)) Ui.Kill(prev);
                     _views[b.Id] = BuildBuilding(b, fire, state);
                     _signature[b.Id] = sig;
                 }
@@ -272,7 +272,7 @@ namespace TradingEmpire.Terminal
 
         void SyncGhost()
         {
-            foreach (Transform c in _ghostRoot) Destroy(c.gameObject);
+            for (int i = _ghostRoot.childCount - 1; i >= 0; i--) Ui.Kill(_ghostRoot.GetChild(i).gameObject);
             var p = City.State.Placement;
             var hover = City.State.Hover;
             var sel = City.State.SelectedId;

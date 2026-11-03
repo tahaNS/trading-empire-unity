@@ -15,8 +15,10 @@ namespace TradingEmpire.Terminal
         public static readonly Color Dim = new Color(0.52f, 0.58f, 0.68f);
         public static readonly Color Accent = new Color(0.96f, 0.75f, 0.24f);
         public static readonly Color Blue = new Color(0.25f, 0.52f, 0.96f);
-        public static readonly Color Bull = new Color(0.15f, 0.76f, 0.58f);
-        public static readonly Color Bear = new Color(0.93f, 0.32f, 0.36f);
+        /// <summary>Colour-blind candles: blue and orange instead of green and red (a setting).</summary>
+        public static bool ColorBlind;
+        public static Color Bull { get { return ColorBlind ? new Color(0.30f, 0.62f, 0.95f) : new Color(0.15f, 0.76f, 0.58f); } }
+        public static Color Bear { get { return ColorBlind ? new Color(0.98f, 0.66f, 0.18f) : new Color(0.93f, 0.32f, 0.36f); } }
         public static readonly Color Grid = new Color(1f, 1f, 1f, 0.06f);
 
         static Font _font, _mono;
@@ -41,6 +43,13 @@ namespace TradingEmpire.Terminal
 
     public static class Ui
     {
+        /// <summary>Destroy a UI object: deferred while playing, immediate in the editor (where Destroy does not run).</summary>
+        public static void Kill(UnityEngine.Object o)
+        {
+            if (o == null) return;
+            if (Application.isPlaying) UnityEngine.Object.Destroy(o); else UnityEngine.Object.DestroyImmediate(o);
+        }
+
         public static RectTransform Rect(Transform parent, string name)
         {
             var go = new GameObject(name, typeof(RectTransform));

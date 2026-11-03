@@ -14,9 +14,10 @@ namespace TradingEmpire.Terminal
     /// The trading terminal screen: top bar, chart, account and order panels, and the positions / orders / history /
     /// statistics tabs. All state comes from <see cref="TradingSession"/>; the UI never changes balances itself.
     /// </summary>
-    public sealed class TerminalView : MonoBehaviour
+    public sealed partial class TerminalView : MonoBehaviour
     {
         public TradingSession Session { get; private set; }
+        public ChallengeController Challenges;
 
         ChartView _chart;
         Text _symbol, _datasetName, _badge, _progress, _toast;
@@ -44,7 +45,7 @@ namespace TradingEmpire.Terminal
 
         Action _onBack;
 
-        public static TerminalView Build(Transform canvas, TradingSession session, Action onBack = null)
+        public static TerminalView Build(Transform canvas, TradingSession session, Action onBack = null, ChallengeController challenges = null)
         {
             var root = Ui.Rect(canvas, "Terminal");
             Ui.Stretch(root);
@@ -53,15 +54,35 @@ namespace TradingEmpire.Terminal
             var view = root.gameObject.AddComponent<TerminalView>();
             view.Session = session;
             view._onBack = onBack;
+            view.Challenges = challenges;
             view.BuildUi(root);
+            view.AttachJournal();
             session.Changed += view.MarkDirty;
             return view;
         }
 
         void MarkDirty() { _dirty = true; }
 
+        /// <summary>Show another trading session (a challenge run, or back to the game's own).</summary>
+        public void SetSession(TradingSession session)
+        {
+            if (session == Session) return;
+            Session.Changed -= MarkDirty;
+            Session.Journal.Changed -= OnJournalChanged;
+            Session = session;
+            Session.Changed += MarkDirty;
+            Session.Journal.Changed += OnJournalChanged;
+            _tfBuiltFor = -1;
+            _journalSig = null;
+            _dirty = true;
+        }
+
         /// <summary>Redraw immediately (used by the editor screenshot tool, where Update does not run).</summary>
         public void RefreshNow() { _dirty = false; Refresh(); }
+
+        public void SelectTab(int tab) { _tab = tab; _journalSig = null; _dirty = true; }
+
+        public void OpenChallengeList() { ToggleChallengeList(true); }
 
         public void ShowLoadPopover(bool show) { _loadPopover.gameObject.SetActive(show); }
         void OnDestroy() { if (Session != null) Session.Changed -= MarkDirty; }
@@ -88,6 +109,7 @@ namespace TradingEmpire.Terminal
 
             BuildToast(root);
             BuildLoadPopover(root);
+            BuildChallengeUi(root);
         }
 
         void BuildTopBar(RectTransform root)
@@ -111,19 +133,24 @@ namespace TradingEmpire.Terminal
             Ui.Place(_datasetName.rectTransform, new Vector2(0, 1), new Vector2(0, 1), new Vector2(312, -30), new Vector2(760, -4));
 
             var badgeBg = Ui.Box(bar, "BadgeBg", new Color(0.35f, 0.25f, 0.05f));
-            Ui.Place(badgeBg.rectTransform, new Vector2(0, 1), new Vector2(0, 1), new Vector2(770, -28), new Vector2(1060, -6));
-            _badge = Ui.Label(badgeBg.transform, "SYNTHETIC TEST DATA - not real prices", 11, Theme.Accent, TextAnchor.MiddleCenter, false, true);
+            Ui.Place(badgeBg.rectTransform, new Vector2(0, 1), new Vector2(0, 1), new Vector2(770, -28), new Vector2(960, -6));
+            _badge = Ui.Label(badgeBg.transform, "SYNTHETIC TEST DATA", 11, Theme.Accent, TextAnchor.MiddleCenter, false, true);
 
             if (_onBack != null)
             {
                 var back = Ui.Button(bar, "< Back to city", () => _onBack(), Theme.PanelAlt, 12);
                 Ui.Place((RectTransform)back.transform, new Vector2(1, 1), new Vector2(1, 1), new Vector2(-260, -28), new Vector2(-130, -6));
             }
+            if (Challenges != null)
+            {
+                var ch = Ui.Button(bar, "Challenges", () => ToggleChallengeList(true), Theme.PanelAlt, 12);
+                Ui.Place((RectTransform)ch.transform, new Vector2(1, 1), new Vector2(1, 1), new Vector2(-390, -28), new Vector2(-270, -6));
+            }
             var load = Ui.Button(bar, "Load data...", () => _loadPopover.gameObject.SetActive(!_loadPopover.gameObject.activeSelf), Theme.PanelAlt, 12);
             Ui.Place((RectTransform)load.transform, new Vector2(1, 1), new Vector2(1, 1), new Vector2(-120, -28), new Vector2(-10, -6));
 
             _progress = Ui.Label(bar, "", 12, Theme.Dim, TextAnchor.MiddleRight, true);
-            Ui.Place(_progress.rectTransform, new Vector2(1, 1), new Vector2(1, 1), new Vector2(-560, -30), new Vector2(-270, -4));
+            Ui.Place(_progress.rectTransform, new Vector2(1, 1), new Vector2(1, 1), new Vector2(-690, -30), new Vector2(-400, -4));
 
             // row 2: replay controls + timeframes
             float x = 12;
@@ -219,7 +246,7 @@ namespace TradingEmpire.Terminal
         {
             Ui.Box(bottom, "Bg", Theme.Panel).rectTransform.SetAsFirstSibling();
             Ui.Stretch((RectTransform)bottom.Find("Bg"));
-            string[] names = { "Open positions", "Orders", "History", "Statistics" };
+            string[] names = { "Open positions", "Orders", "History", "Journal", "Statistics" };
             float x = 10;
             for (int i = 0; i < names.Length; i++)
             {
@@ -362,6 +389,7 @@ namespace TradingEmpire.Terminal
             Signed(_realized, a.RealizedPnl);
 
             _chart.Refresh(Session.ChartData());
+            RefreshChallenge();
             RefreshTabs(s, inst);
 
             if (s.Notice != null && s.Notice.Seq != _lastToastSeq)
@@ -385,7 +413,7 @@ namespace TradingEmpire.Terminal
         {
             if (_tfBuiltFor != s.NativeMs)
             {
-                foreach (var b in _tfButtons) Destroy(b.gameObject);
+                foreach (var b in _tfButtons) Ui.Kill(b.gameObject);
                 _tfButtons.Clear();
                 var tfs = Timeframes.Available(s.NativeMs);
                 float w = 40f;
@@ -409,13 +437,22 @@ namespace TradingEmpire.Terminal
             Ui.SetButtonLabel(_tabButtons[0], "Open positions (" + s.Positions.Count + ")");
             Ui.SetButtonLabel(_tabButtons[1], "Orders (" + s.Pending.Count + ")");
             Ui.SetButtonLabel(_tabButtons[2], "History (" + s.Closed.Count + ")");
-            foreach (var r in _rows) Destroy(r);
+            if (_tab == 3)
+            {
+                // the journal has text fields: rebuild it only when its own content changed, so typing is never interrupted
+                string sig = JournalSignature(s);
+                if (sig == _journalSig) return;
+                _journalSig = sig;
+            }
+            else _journalSig = null;
+            foreach (var r in _rows) Ui.Kill(r);
             _rows.Clear();
             _tabBody.text = "";
             int d = inst.Digits;
             if (_tab == 0) PositionRows(s, d);
             else if (_tab == 1) OrderRows(s, d);
             else if (_tab == 2) _tabBody.text = History(s);
+            else if (_tab == 3) JournalTab(s);
             else _tabBody.text = Stats(s);
         }
 

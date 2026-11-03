@@ -60,7 +60,7 @@ namespace TradingEmpire.EditorTools
             var rt = new RenderTexture(1600, 900, 24, RenderTextureFormat.ARGB32);
             cam.targetTexture = rt;
 
-            var app = GameApp.Create(cam);
+            var app = GameApp.Create(cam, false, true);
             var scaler = app.GetComponent<Transform>().root.GetComponentInChildren<CanvasScaler>(true) ?? UnityEngine.Object.FindFirstObjectByType<CanvasScaler>();
             scaler.uiScaleMode = CanvasScaler.ScaleMode.ConstantPixelSize;
             scaler.scaleFactor = 1f;
@@ -87,12 +87,36 @@ namespace TradingEmpire.EditorTools
             hud.transform.Find("TransferPanel").gameObject.SetActive(true);
             Shot(app, cam, rt, prefix + "-city-panels.png");
 
+            // the menu with the missions
+            app.MenuHud.Show(true);
+            app.MenuHud.SelectTab(1);
+            Shot(app, cam, rt, prefix + "-menu.png");
+            app.MenuHud.SelectTab(0);
+            Shot(app, cam, rt, prefix + "-menu-game.png");
+            app.MenuHud.Show(false);
+
             // the terminal, with a trade open
             app.ShowTerminal(true);
             var s = app.World.Trading;
             s.QuickOrder(Direction.Buy, 10, 20, 40);
             for (int i = 0; i < 8; i++) s.Step();
             Shot(app, cam, rt, prefix + "-terminal.png");
+
+            // the journal: close the trade and write about it
+            s.CloseAll();
+            s.QuickOrder(Direction.Sell, 10, 15, 30);
+            for (int i = 0; i < 3; i++) s.Step();
+            s.CloseAll();
+            var closed = s.State.Closed;
+            s.Journal.Set(JournalStore.KeyOf(closed[0]), "Waited for the pullback, stop under the swing low.", new[] { "Good setup", "Patient" }, 4);
+            s.Journal.Set(JournalStore.KeyOf(closed[1]), "Chased it after missing the move.", new[] { "FOMO", "Chased price" }, 2);
+            app.Terminal.SelectTab(3);
+            Shot(app, cam, rt, prefix + "-journal.png");
+
+            // the challenge list, and a challenge run
+            app.Terminal.SelectTab(0);
+            app.Terminal.OpenChallengeList();
+            Shot(app, cam, rt, prefix + "-challenges.png");
 
             cam.targetTexture = null;
             rt.Release();
@@ -109,6 +133,7 @@ namespace TradingEmpire.EditorTools
         {
             app.CityView.SyncNow();
             app.CityHud.RefreshNow();
+            app.MenuHud.RefreshNow();
             if (app.TerminalOpen) app.Terminal.RefreshNow();
             Canvas.ForceUpdateCanvases();
             if (app.TerminalOpen) app.Terminal.RefreshNow(); else app.CityHud.RefreshNow();
