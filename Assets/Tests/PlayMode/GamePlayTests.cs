@@ -301,6 +301,108 @@ namespace TradingEmpire.PlayModeTests
         }
 
         [UnityTest]
+        public IEnumerator Chart_tools_draw_select_edit_and_delete_with_pointer_events()
+        {
+            _app = GameApp.Create(null, false, true);
+            yield return null;
+            Find("Terminal").onClick.Invoke();
+            for (int i = 0; i < 3; i++) yield return null;
+            var chart = _app.Terminal.Chart;
+            var store = _app.World.Trading.Drawings;
+            var plot = chart.Graphic.Plot;
+            Assert.Greater(plot.width, 100f, "the chart has no plot area yet");
+            Vector2 At(float fx, float fy) { return new Vector2(plot.xMin + plot.width * fx, plot.yMin + plot.height * fy); }
+
+            // a horizontal line takes one click
+            chart.SetTool("hline");
+            chart.PointerDown(At(0.5f, 0.5f));
+            Assert.AreEqual(1, store.Items.Count);
+            Assert.AreEqual("hline", store.Items[0].Kind);
+            Assert.AreEqual(store.Items[0].Id, chart.SelectedId);
+            Assert.IsNull(chart.Tool, "the tool should return to the cursor after drawing");
+
+            // a trend line takes two clicks
+            chart.SetTool("trend");
+            chart.PointerDown(At(0.2f, 0.3f));
+            Assert.AreEqual(1, chart.PendingCount);
+            Assert.AreEqual(1, store.Items.Count);
+            chart.PointerUp(At(0.2f, 0.3f)); // a click, not a drag: the line waits for its second point
+            chart.PointerDown(At(0.7f, 0.6f));
+            Assert.AreEqual(2, store.Items.Count);
+            Assert.AreEqual("trend", store.Items[1].Kind);
+            var trend = store.Items[1];
+            Assert.IsTrue(trend.GetAnchor("a").HasValue && trend.GetAnchor("b").HasValue);
+            Assert.Less(trend.GetAnchor("a").Value.Time, trend.GetAnchor("b").Value.Time);
+
+            // a position box and a Fibonacci (two clicks) too
+            chart.SetTool("long");
+            chart.PointerDown(At(0.5f, 0.4f));
+            Assert.AreEqual("position", store.Items[2].Kind);
+            chart.SetTool("fib");
+            chart.PointerDown(At(0.3f, 0.2f)); chart.PointerUp(At(0.3f, 0.2f)); chart.PointerDown(At(0.6f, 0.7f));
+            Assert.AreEqual(4, store.Items.Count);
+            yield return null;
+
+            // everything is drawn: the scene has lines for each drawing
+            Assert.IsNotNull(chart.Graphic.Scene);
+            foreach (var d in store.Items) Assert.IsTrue(chart.Graphic.Scene.Lines.Any(l => l.DrawingId == d.Id) || chart.Graphic.Scene.Fills.Any(f => f.DrawingId == d.Id), d.Kind + " was not drawn");
+
+            // select by clicking on the trend line (the other drawings cross it, and the topmost one wins, so remove them first)
+            foreach (var d in store.Items.Where(x => x.Id != trend.Id).ToList()) store.Remove(d.Id);
+            yield return null;
+            chart.SetTool(null);
+            chart.Select(null);
+            var line = chart.Graphic.Scene.Lines.First(l => l.DrawingId == trend.Id);
+            chart.PointerDown((line.A + line.B) / 2);
+            Assert.AreEqual(trend.Id, chart.SelectedId, "clicking on a line should select it");
+            long before = store.Get(trend.Id).GetAnchor("a").Value.Time;
+            chart.PointerUp((line.A + line.B) / 2);
+
+            // a locked drawing does not move
+            _app.Terminal.Chart.Select(trend.Id);
+            store.Update(trend.Id, d => d.Data.Set("locked", true));
+            chart.PointerDown((line.A + line.B) / 2 );
+            Assert.AreEqual(trend.Id, chart.SelectedId);
+
+            // delete and clear
+            chart.DeleteSelected();
+            Assert.AreEqual(0, store.Items.Count);
+            Assert.IsNull(chart.SelectedId);
+            store.Clear();
+            Assert.AreEqual(0, store.Items.Count);
+        }
+
+        [UnityTest]
+        public IEnumerator Sounds_play_for_game_events_and_respect_mute()
+        {
+            _app = GameApp.Create(null, false, true);
+            yield return null;
+            var audio = _app.Audio;
+            Assert.IsNotNull(audio);
+            audio.SetMuted(false);
+            int before = audio.Played;
+            _app.World.Trading.QuickOrder(Direction.Buy, 10, 20, 40); // "Opened buy ..." is a trade-open sound
+            Assert.Greater(audio.Played, before, "no sound for opening a trade");
+            Assert.AreEqual(SoundId.TradeOpen, audio.LastPlayed);
+            before = audio.Played;
+            _app.World.Trading.CloseAll();
+            Assert.Greater(audio.Played, before);
+            // the UI click
+            before = audio.Played;
+            Find("Menu").onClick.Invoke();
+            Assert.Greater(audio.Played, before, "buttons should click");
+            // muted: nothing plays
+            audio.SetMuted(true);
+            before = audio.Played;
+            _app.World.Trading.QuickOrder(Direction.Sell, 10, 20, 40);
+            Assert.AreEqual(before, audio.Played);
+            audio.SetMuted(false);
+            // the hum follows the city
+            audio.UpdateHum(_app.World, false);
+            yield return null;
+        }
+
+        [UnityTest]
         public IEnumerator Settings_apply_to_the_running_game()
         {
             _app = GameApp.Create(null, false, true);

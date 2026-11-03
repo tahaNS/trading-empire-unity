@@ -24,6 +24,7 @@ namespace TradingEmpire.Terminal
         public TerminalView Terminal { get; private set; }
         public ChallengeController Challenges { get; private set; }
         public SaveManager Saves { get; private set; }
+        public AudioManager Audio { get; private set; }
         public bool TerminalOpen { get; private set; }
         public string LastError { get; private set; }
 
@@ -98,7 +99,9 @@ namespace TradingEmpire.Terminal
             if (FindFirstObjectByType<EventSystem>() == null)
                 new GameObject("EventSystem", typeof(EventSystem), typeof(StandaloneInputModule));
 
-            app.Challenges = new ChallengeController(app.World, s => app.Terminal.SetSession(s));
+            app.Audio = AudioManager.Create(app.World);
+            app._owned.Add(app.Audio.gameObject);
+            app.Challenges = new ChallengeController(app.World, s => { app.Terminal.SetSession(s); if (s != app.World.Trading) app.Audio.Watch(s); });
             app.CityHud = CityHud.Build(canvasGo.transform, app.World, () => app.ShowTerminal(true), () => app.MenuHud.Show(true));
             app.Terminal = TerminalView.Build(canvasGo.transform, app.World.Trading, () => app.ShowTerminal(false), app.Challenges);
             app.MenuHud = MenuHud.Build(canvasGo.transform, app);
@@ -115,6 +118,7 @@ namespace TradingEmpire.Terminal
             CityHud.gameObject.SetActive(!open);
             CityView.Interactive = !open && !MenuHud.Open;
             MenuHud.RefreshNow();
+            Audio.UpdateHum(World, open);
             if (open) Terminal.RefreshNow(); else CityHud.RefreshNow();
         }
 

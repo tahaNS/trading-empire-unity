@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using System.Linq;
 using TradingEmpire.Core;
 using UnityEngine;
 using UnityEngine.EventSystems;
@@ -8,22 +9,70 @@ using UnityEngine.UI;
 
 namespace TradingEmpire.Terminal
 {
-    /// <summary>The chart area: the candle mesh plus its price / time / level labels, and mouse-wheel zoom.</summary>
+    /// <summary>
+    /// The chart area: the candle mesh plus its price / time / level labels, mouse-wheel zoom, and the drawing tools (a tool strip on the
+    /// left, drawing and editing with the mouse, a properties bar for the selected drawing).
+    /// </summary>
     public sealed class ChartView : MonoBehaviour, IPointerEnterHandler, IPointerExitHandler
     {
+        sealed class ToolDef { public string Id, Label, Hint; public ToolDef(string id, string label, string hint) { Id = id; Label = label; Hint = hint; } }
+
+        static readonly ToolDef[] Tools =
+        {
+            new ToolDef(null, "Sel", "Select: click a drawing to select, drag it or its handles. Del deletes."),
+            new ToolDef("hline", "H", "Horizontal line: click a price."),
+            new ToolDef("vline", "V", "Vertical line: click a time."),
+            new ToolDef("hray", "Ray", "Horizontal ray: click where it starts."),
+            new ToolDef("trend", "Tr", "Trend line: click two points (or drag)."),
+            new ToolDef("channel", "Ch", "Parallel channel: click two points, then the width."),
+            new ToolDef("rect", "Rc", "Rectangle: click two corners (or drag)."),
+            new ToolDef("ellipse", "El", "Ellipse: click two corners (or drag)."),
+            new ToolDef("fib", "Fib", "Fibonacci retracement: click the swing start and end."),
+            new ToolDef("fibext", "FX", "Fibonacci extension: click the move (2 points), then where it restarts."),
+            new ToolDef("text", "Txt", "Text note: click where it goes, then type its text above."),
+            new ToolDef("pricelabel", "$", "Price label: click a price."),
+            new ToolDef("up", "Up", "Arrow up marker: click."),
+            new ToolDef("down", "Dn", "Arrow down marker: click."),
+            new ToolDef("long", "Lg", "Long position box (entry, 20 pip stop, 40 pip target): click the entry."),
+            new ToolDef("short", "Sh", "Short position box (entry, 20 pip stop, 40 pip target): click the entry."),
+        };
+
         CandleGraphic _graphic;
         RectTransform _root;
         readonly List<Text> _priceLabels = new List<Text>();
         readonly List<Text> _timeLabels = new List<Text>();
         readonly List<Text> _lineLabels = new List<Text>();
-        Text _empty;
+        readonly List<Text> _drawLabels = new List<Text>();
+        Text _empty, _hint;
         bool _hover;
+
+        // drawing state
+        TradingSession _session;
+        string _tool;
+        readonly List<Anchor> _pending = new List<Anchor>();
+        bool _dragCreating;
+        Vector2 _downPos;
+        string _selectedId;
+        int _dragHandle = -1;
+        bool _moving;
+        Anchor _lastAnchor;
+        int _colorIndex;
+        ChartData _data;
+        readonly List<Button> _toolButtons = new List<Button>();
+        RectTransform _props;
+        Button _lockButton, _hideButton, _planButton;
+        InputField _textField;
+        Text _widthLabel;
+        bool _propsDirty = true;
+
+        /// <summary>Called when a position box should fill the order panel.</summary>
+        public Action<Drawing> PlanFromPosition;
 
         public static ChartView Create(Transform parent)
         {
             var rt = Ui.Rect(parent, "Chart");
             var bg = rt.gameObject.AddComponent<Image>();
-            bg.color = Theme.Panel; // also lets the pointer-enter events reach the chart
+            bg.color = Theme.Panel; // also lets the pointer events reach the chart
             var view = rt.gameObject.AddComponent<ChartView>();
             view._root = rt;
 
@@ -33,26 +82,319 @@ namespace TradingEmpire.Terminal
             view._graphic = g.gameObject.AddComponent<CandleGraphic>();
             view._graphic.raycastTarget = false;
             view._empty = Ui.Label(rt, "No data loaded", 18, Theme.Dim, TextAnchor.MiddleCenter);
+            view.BuildToolStrip();
+            view.BuildProps();
             return view;
         }
 
         public void OnPointerEnter(PointerEventData e) { _hover = true; }
         public void OnPointerExit(PointerEventData e) { _hover = false; }
 
+        // ---------------------------------------------------------------- session binding
+
+        /// <summary>Show the drawings of this trading session (called again when a challenge swaps the session).</summary>
+        public void Bind(TradingSession session)
+        {
+            if (_session != null) _session.Drawings.Changed -= OnDrawingsChanged;
+            _session = session;
+            _session.Drawings.Changed += OnDrawingsChanged;
+            _tool = null;
+            _pending.Clear();
+            _selectedId = null;
+            _propsDirty = true;
+        }
+
+        void OnDestroy() { if (_session != null) _session.Drawings.Changed -= OnDrawingsChanged; }
+        void OnDrawingsChanged() { _propsDirty = true; }
+
+        // ---------------------------------------------------------------- tool strip and properties bar
+
+        void BuildToolStrip()
+        {
+            var strip = Ui.Rect(_root, "Tools");
+            Ui.Place(strip, new Vector2(0, 0), new Vector2(0, 1), new Vector2(2, 28), new Vector2(40, -4));
+            Ui.Panel(strip, "Bg", new Color(0.05f, 0.07f, 0.1f, 0.9f)).rectTransform.SetAsFirstSibling();
+            Ui.Stretch((RectTransform)strip.Find("Bg"));
+            float y = 2, h = 24;
+            foreach (var t in Tools)
+            {
+                var tool = t;
+                var b = Ui.Button(strip, t.Label, () => SetTool(tool.Id), Theme.PanelAlt, 10);
+                Ui.Place((RectTransform)b.transform, new Vector2(0, 1), new Vector2(1, 1), new Vector2(2, -y - h), new Vector2(-2, -y));
+                _toolButtons.Add(b);
+                y += h + 2;
+            }
+            var del = Ui.Button(strip, "Clr", () => { if (_session != null) _session.Drawings.Clear(); _selectedId = null; }, new Color(0.45f, 0.18f, 0.2f), 10);
+            Ui.Place((RectTransform)del.transform, new Vector2(0, 0), new Vector2(1, 0), new Vector2(2, 2), new Vector2(-2, 26));
+            _hint = Ui.Label(_root, "", 11, Theme.Dim, TextAnchor.MiddleLeft);
+            Ui.Place(_hint.rectTransform, new Vector2(0, 1), new Vector2(1, 1), new Vector2(48, -24), new Vector2(-90, -4));
+        }
+
+        void BuildProps()
+        {
+            _props = Ui.Rect(_root, "DrawingProps");
+            Ui.Place(_props, new Vector2(0.5f, 0), new Vector2(0.5f, 0), new Vector2(-250, 34), new Vector2(250, 68));
+            Ui.Panel(_props, "Bg", new Color(0.09f, 0.12f, 0.17f, 0.97f)).rectTransform.SetAsFirstSibling();
+            Ui.Stretch((RectTransform)_props.Find("Bg"));
+            float x = 6;
+            for (int i = 0; i < DrawingKinds.Colors.Length; i++)
+            {
+                string hex = DrawingKinds.Colors[i];
+                ColorUtility.TryParseHtmlString(hex, out var c);
+                var b = Ui.Button(_props, "", () => EditSelected(d => d.Data.Set("color", hex)), c, 10);
+                Ui.Place((RectTransform)b.transform, new Vector2(0, 0), new Vector2(0, 1), new Vector2(x, 6), new Vector2(x + 22, -6));
+                x += 26;
+            }
+            x += 6;
+            var minus = Ui.Button(_props, "-", () => EditSelected(d => d.Data.Set("width", Math.Max(1, d.Width - 0.5))), Theme.PanelAlt, 12);
+            Ui.Place((RectTransform)minus.transform, new Vector2(0, 0), new Vector2(0, 1), new Vector2(x, 6), new Vector2(x + 22, -6));
+            _widthLabel = Ui.Label(_props, "1.5", 11, Theme.Text, TextAnchor.MiddleCenter, true);
+            Ui.Place(_widthLabel.rectTransform, new Vector2(0, 0), new Vector2(0, 1), new Vector2(x + 22, 0), new Vector2(x + 48, 0));
+            var plus = Ui.Button(_props, "+", () => EditSelected(d => d.Data.Set("width", Math.Min(4, d.Width + 0.5))), Theme.PanelAlt, 12);
+            Ui.Place((RectTransform)plus.transform, new Vector2(0, 0), new Vector2(0, 1), new Vector2(x + 48, 6), new Vector2(x + 70, -6));
+            x += 76;
+            var dash = Ui.Button(_props, "Dash", () => EditSelected(d => d.Data.Set("dash", d.Dash == "solid" ? "dashed" : d.Dash == "dashed" ? "dotted" : "solid")), Theme.PanelAlt, 10);
+            Ui.Place((RectTransform)dash.transform, new Vector2(0, 0), new Vector2(0, 1), new Vector2(x, 6), new Vector2(x + 44, -6));
+            x += 48;
+            _lockButton = Ui.Button(_props, "Lock", () => EditSelected(d => d.Data.Set("locked", !d.Locked)), Theme.PanelAlt, 10);
+            Ui.Place((RectTransform)_lockButton.transform, new Vector2(0, 0), new Vector2(0, 1), new Vector2(x, 6), new Vector2(x + 44, -6));
+            x += 48;
+            _hideButton = Ui.Button(_props, "Hide", () => EditSelected(d => d.Data.Set("hidden", !d.Hidden)), Theme.PanelAlt, 10);
+            Ui.Place((RectTransform)_hideButton.transform, new Vector2(0, 0), new Vector2(0, 1), new Vector2(x, 6), new Vector2(x + 44, -6));
+            x += 48;
+            var del = Ui.Button(_props, "Del", DeleteSelected, new Color(0.45f, 0.18f, 0.2f), 10);
+            Ui.Place((RectTransform)del.transform, new Vector2(0, 0), new Vector2(0, 1), new Vector2(x, 6), new Vector2(x + 40, -6));
+            _props.gameObject.SetActive(false);
+
+            // a text field for the text of a text note, and a button to send a position box to the order panel
+            _textField = Ui.Input(_root, "", 12);
+            Ui.Place((RectTransform)_textField.transform, new Vector2(0.5f, 0), new Vector2(0.5f, 0), new Vector2(-250, 72), new Vector2(250, 100));
+            _textField.onEndEdit.AddListener(t => EditSelected(d => { if (d.Kind == "text") d.Data.Set("text", t); }));
+            _textField.gameObject.SetActive(false);
+            _planButton = Ui.Button(_root, "Use in the order panel", () => { var d = SelectedDrawing(); if (d != null && PlanFromPosition != null) PlanFromPosition(d); }, new Color(0.1f, 0.5f, 0.4f), 11);
+            Ui.Place((RectTransform)_planButton.transform, new Vector2(0.5f, 0), new Vector2(0.5f, 0), new Vector2(-250, 72), new Vector2(-70, 100));
+            _planButton.gameObject.SetActive(false);
+        }
+
+        public string Tool { get { return _tool; } }
+        public string SelectedId { get { return _selectedId; } }
+        public int PendingCount { get { return _pending.Count; } }
+
+        public void SetTool(string id)
+        {
+            _tool = id;
+            _pending.Clear();
+            _dragCreating = false;
+            if (id != null) _selectedId = null;
+            _propsDirty = true;
+        }
+
+        Drawing SelectedDrawing() { return _session != null && _selectedId != null ? _session.Drawings.Items.FirstOrDefault(d => d.Id == _selectedId) : null; }
+
+        void EditSelected(Action<Drawing> change)
+        {
+            if (_session == null || _selectedId == null) return;
+            _session.Drawings.Update(_selectedId, change);
+        }
+
+        public void DeleteSelected()
+        {
+            if (_session == null || _selectedId == null) return;
+            _session.Drawings.Remove(_selectedId);
+            _selectedId = null;
+            _propsDirty = true;
+        }
+
+        public void Select(string id) { _selectedId = id; _propsDirty = true; }
+
+        void RefreshProps()
+        {
+            _propsDirty = false;
+            for (int i = 0; i < _toolButtons.Count; i++) Ui.SetButtonColor(_toolButtons[i], Tools[i].Id == _tool ? Theme.Blue : Theme.PanelAlt);
+            var tool = Tools.FirstOrDefault(t => t.Id == _tool);
+            _hint.text = tool != null ? tool.Hint : "";
+            var d = SelectedDrawing();
+            _props.gameObject.SetActive(d != null);
+            _textField.gameObject.SetActive(d != null && d.Kind == "text");
+            _planButton.gameObject.SetActive(d != null && d.Kind == "position");
+            if (d == null) return;
+            _widthLabel.text = d.Width.ToString("0.0", CultureInfo.InvariantCulture);
+            Ui.SetButtonColor(_lockButton, d.Locked ? Theme.Blue : Theme.PanelAlt);
+            Ui.SetButtonColor(_hideButton, d.Hidden ? Theme.Blue : Theme.PanelAlt);
+            if (d.Kind == "text" && !_textField.isFocused) _textField.text = d.Text ?? "";
+        }
+
+        // ---------------------------------------------------------------- mouse
+
+        bool TopHitIsChart()
+        {
+            var es = EventSystem.current;
+            if (es == null) return true;
+            var results = new List<RaycastResult>();
+            es.RaycastAll(new PointerEventData(es) { position = Input.mousePosition }, results);
+            return results.Count > 0 && results[0].gameObject == gameObject;
+        }
+
+        bool Typing()
+        {
+            var es = EventSystem.current;
+            var sel = es != null ? es.currentSelectedGameObject : null;
+            return sel != null && sel.GetComponent<InputField>() != null;
+        }
+
+        Vector2 LocalMouse()
+        {
+            var canvas = GetComponentInParent<Canvas>();
+            var cam = canvas != null && canvas.renderMode != RenderMode.ScreenSpaceOverlay ? canvas.worldCamera : null;
+            RectTransformUtility.ScreenPointToLocalPointInRectangle(_root, Input.mousePosition, cam, out var local);
+            return local;
+        }
+
+        Anchor AnchorAt(Vector2 local) { return new Anchor(_graphic.TimeOfX(local.x), Math.Round(_graphic.PriceOfY(local.y))); }
+
         void Update()
         {
+            if (_propsDirty) RefreshProps();
             if (!_hover) return;
             float wheel = Input.mouseScrollDelta.y;
-            if (Mathf.Abs(wheel) > 0.01f)
+            if (Mathf.Abs(wheel) > 0.01f && TopHitIsChart())
             {
                 _graphic.VisibleBars = Mathf.Clamp(Mathf.RoundToInt(_graphic.VisibleBars * (wheel > 0 ? 0.88f : 1.14f)), 20, 600);
                 _graphic.SetVerticesDirty();
                 LayoutLabels();
             }
+            if (_session == null || _graphic.Count == 0) return;
+            HandleDrawingInput();
         }
+
+        void HandleDrawingInput()
+        {
+            if (Typing()) return;
+            if (Input.GetKeyDown(KeyCode.Escape)) { if (_pending.Count > 0 || _tool != null) SetTool(null); else Select(null); }
+            if ((Input.GetKeyDown(KeyCode.Delete) || Input.GetKeyDown(KeyCode.Backspace)) && _selectedId != null) DeleteSelected();
+            if (Input.GetMouseButtonDown(1)) SetTool(null);
+
+            var local = LocalMouse();
+            bool inPlot = _graphic.Plot.Contains(local);
+            if (_pending.Count > 0 || _dragHandle >= 0 || _moving) LayoutLabels(); // the preview and the drag follow the pointer
+
+            if (Input.GetMouseButtonDown(0) && inPlot && TopHitIsChart()) PointerDown(local);
+            else if (Input.GetMouseButton(0)) PointerDrag(local);
+            if (Input.GetMouseButtonUp(0)) PointerUp(local);
+        }
+
+        // ---- drawing with the tool
+
+        /// <summary>Handle a press at a chart-local point (also used by tests).</summary>
+        public void PointerDown(Vector2 local)
+        {
+            var a = AnchorAt(local);
+            if (_tool != null)
+            {
+                int need = NeededAnchors(_tool);
+                if (need == 0) { Place(_tool, new List<Anchor> { a }); return; }
+                _pending.Add(a);
+                if (_pending.Count == 1) { _dragCreating = true; _downPos = local; }
+                if (_pending.Count == need) Place(_tool, new List<Anchor>(_pending));
+                return;
+            }
+            // cursor: handles first, then a body
+            var scene = _graphic.Scene;
+            var sel = SelectedDrawing();
+            if (sel != null && scene != null && !sel.Locked)
+            {
+                foreach (var h in scene.Handles)
+                    if (h.DrawingId == sel.Id && Vector2.Distance(h.At, local) <= 10f) { _dragHandle = h.Index; return; }
+            }
+            string hit = scene != null ? DrawingRenderer.HitTest(scene, _session.Drawings.Items, local) : null;
+            Select(hit);
+            if (hit != null) { var d = SelectedDrawing(); if (d != null && !d.Locked) { _moving = true; _lastAnchor = a; } }
+        }
+
+        public void PointerDrag(Vector2 local)
+        {
+            var a = AnchorAt(local);
+            if (_dragHandle >= 0 && _selectedId != null) { int idx = _dragHandle; EditSelected(d => DrawingKinds.SetAnchorAt(d, idx, a)); }
+            else if (_moving && _selectedId != null)
+            {
+                long dt = a.Time - _lastAnchor.Time; double dp = a.Price - _lastAnchor.Price;
+                _lastAnchor = a;
+                if (dt != 0 || dp != 0) EditSelected(d => DrawingKinds.Translate(d, dt, dp));
+            }
+        }
+
+        public void PointerUp(Vector2 local)
+        {
+            _dragHandle = -1;
+            _moving = false;
+            if (_dragCreating && _tool != null && _pending.Count == 1)
+            {
+                _dragCreating = false;
+                // dragging from the first point to another draws the second point in one go
+                if (Vector2.Distance(local, _downPos) > 8f && NeededAnchors(_tool) >= 2)
+                {
+                    _pending.Add(AnchorAt(local));
+                    if (_pending.Count == NeededAnchors(_tool)) Place(_tool, new List<Anchor>(_pending));
+                }
+            }
+            _dragCreating = false;
+        }
+
+        static int NeededAnchors(string tool)
+        {
+            switch (tool)
+            {
+                case "up": case "down": case "long": case "short": return 0;
+                default: return DrawingKinds.AnchorCount.TryGetValue(tool, out var n) ? n : 0;
+            }
+        }
+
+        string NextColor() { return DrawingKinds.Colors[_colorIndex % DrawingKinds.Colors.Length]; }
+
+        /// <summary>Create the drawing for the tool from its anchors, select it, and go back to the cursor.</summary>
+        public Drawing Build(string tool, List<Anchor> anchors, string color)
+        {
+            var a = anchors[0];
+            int pip = _graphic != null && _data != null ? _data.PipPoints : 10;
+            long barMs = _graphic != null ? _graphic.TfMs : 60000;
+            switch (tool)
+            {
+                case "hline": return DrawingKinds.HLine(a.Price, color);
+                case "vline": return DrawingKinds.VLine(a.Time, color);
+                case "text": return DrawingKinds.Text(a, "Note", color);
+                case "up": return DrawingKinds.Marker(a, true, color);
+                case "down": return DrawingKinds.Marker(a, false, color);
+                case "long": return DrawingKinds.Position(true, a, a.Time + 30 * barMs, a.Price + 40 * pip, a.Price - 20 * pip, color);
+                case "short": return DrawingKinds.Position(false, a, a.Time + 30 * barMs, a.Price - 40 * pip, a.Price + 20 * pip, color);
+                case "trend": return DrawingKinds.Trend(a, anchors[1], color);
+                default:
+                {
+                    var keys = tool == "hray" || tool == "pricelabel" ? new[] { "a" } : new[] { "a", "b", "c" };
+                    string kind = tool;
+                    var list = new List<(string, Anchor)>();
+                    string[] ks = kind == "pricelabel" ? new[] { "at" } : keys;
+                    for (int i = 0; i < anchors.Count && i < ks.Length; i++) list.Add((ks[i], anchors[i]));
+                    return DrawingKinds.Make(kind, color, list.ToArray());
+                }
+            }
+        }
+
+        public void Place(string tool, List<Anchor> anchors)
+        {
+            var d = Build(tool, anchors, NextColor());
+            string id = _session.Drawings.Add(d);
+            _colorIndex++;
+            _pending.Clear();
+            _tool = null;
+            Select(id);
+            _propsDirty = true;
+        }
+
+        // ---------------------------------------------------------------- refresh
 
         public void Refresh(ChartData d)
         {
+            _data = d;
             _empty.gameObject.SetActive(d.Candles.Count == 0);
             var g = _graphic;
             g.Bars = d.Candles;
@@ -62,6 +404,7 @@ namespace TradingEmpire.Terminal
             g.Lines = BuildLines(d);
             g.SetVerticesDirty();
             LayoutLabels();
+            if (_propsDirty) RefreshProps();
         }
 
         static List<ChartLine> BuildLines(ChartData d)
@@ -87,6 +430,24 @@ namespace TradingEmpire.Terminal
             return lines;
         }
 
+        void BuildScene()
+        {
+            var g = _graphic;
+            if (_session == null || g.Count == 0) { g.Scene = null; return; }
+            var map = new ChartMap { X = g.XOfTime, Y = p => g.YOf(p), Plot = g.Plot, Digits = _data != null ? _data.Digits : 5, PipPoints = _data != null ? _data.PipPoints : 10 };
+            Drawing preview = null;
+            if (_tool != null && _pending.Count > 0 && NeededAnchors(_tool) > 0)
+            {
+                var list = new List<Anchor>(_pending);
+                var mouse = AnchorAt(LocalMouse());
+                while (list.Count < NeededAnchors(_tool)) list.Add(mouse);
+                preview = Build(_tool, list, "#9fb3c8");
+                preview.Data.Set("id", "preview");
+                preview.Data.Set("dash", "dashed");
+            }
+            g.Scene = DrawingRenderer.Build(_session.Drawings.Items, map, _selectedId, preview);
+        }
+
         void LayoutLabels()
         {
             var g = _graphic;
@@ -94,6 +455,9 @@ namespace TradingEmpire.Terminal
             foreach (var t in _priceLabels) t.gameObject.SetActive(false);
             foreach (var t in _timeLabels) t.gameObject.SetActive(false);
             foreach (var t in _lineLabels) t.gameObject.SetActive(false);
+            foreach (var t in _drawLabels) t.gameObject.SetActive(false);
+            BuildScene();
+            g.SetVerticesDirty();
             if (g.Count == 0) return;
 
             float axisX = g.Plot.xMax + 6;
@@ -105,7 +469,6 @@ namespace TradingEmpire.Terminal
                 t.text = Units.FormatPrice(p, g.Digits);
             }
 
-            // time labels
             int every = Mathf.Max(5, (int)(Mathf.Round(g.Count / 6f / 5f) * 5));
             int k = 0;
             for (int i = g.FirstIndex; i < g.Bars.Count; i++)
@@ -117,7 +480,6 @@ namespace TradingEmpire.Terminal
                 t.text = FormatTime(g.Bars[i].Time, g.TfMs);
             }
 
-            // level labels (bid, entries, SL/TP, pending): small tags at the right edge of the plot
             int m = 0;
             foreach (var l in g.Lines)
             {
@@ -126,6 +488,19 @@ namespace TradingEmpire.Terminal
                 t.alignment = TextAnchor.MiddleRight;
                 Pos(t, g.Plot.xMax - 190, g.YOf(l.Price) + 8, 188, 14);
                 t.text = l.Label;
+            }
+
+            if (g.Scene != null)
+            {
+                int dl = 0;
+                foreach (var lb in g.Scene.Labels)
+                {
+                    if (!g.Plot.Contains(lb.At)) continue;
+                    var t = Pooled(_drawLabels, dl++, 11, lb.Color);
+                    t.alignment = TextAnchor.MiddleLeft;
+                    Pos(t, lb.At.x, lb.At.y, Mathf.Max(60, lb.Text.Length * 7 + 8), 14);
+                    t.text = lb.Text;
+                }
             }
         }
 
@@ -160,5 +535,8 @@ namespace TradingEmpire.Terminal
             rt.sizeDelta = new Vector2(w, h);
             rt.anchoredPosition = new Vector2(x, y - h / 2);
         }
+
+        // for tests and tools
+        public CandleGraphic Graphic { get { return _graphic; } }
     }
 }

@@ -41,10 +41,12 @@ dotnet test
 | 3 | City grid, streets, buildings, economy, events, policies, mood, landmarks, capital transfer, 3D city view and HUD | done: 125 tests, views checked from headless screenshots; not yet played interactively |
 | 4 | Missions and progression, game over, achievements, trade journal, challenges, saves (web-compatible v4 format, backups, import/export), menu, settings | done: 153 tests, screens checked from headless screenshots; not yet played interactively |
 
-Not ported from the web version: chart drawings and indicators, order planning on the chart, sound, photo mode and fly-over, Electron packaging.
+Phase 5 (done): sound (all synthesised: effects for trades, building, rent, missions, plus a city hum that follows size and mood; a sound on/off setting) and chart drawings (tool strip: lines, rays, trend, channel, rectangle, ellipse, Fibonacci retracement and extension, text, price label, markers, long and short boxes; select, drag, reshape, colour, width, dash, lock, hide, delete; saved with the game in the web version's format, so all 21 kinds survive a save even where they are not drawn yet).
+
+Not ported from the web version: indicators, the other drawing kinds (regression channel, pitchfork, Gann fan, Fibonacci channel / time zones / fan / arcs are kept and shown as outlines), photo mode and fly-over, Electron packaging.
 
 ## Tests
-- `cd Tests/Core.Tests && dotnet test` the game rules (169 tests, including a random-play stress test: many seeds of random trading, building, transfers, policies, challenges, with a save and reload every few steps).
+- `cd Tests/Core.Tests && dotnet test` the game rules (196 tests, including a random-play stress test: many seeds of random trading, building, transfers, policies, challenges, with a save and reload every few steps).
 - **Window > General > Test Runner > PlayMode** (or `Unity -batchmode -runTests -testPlatform PlayMode`) runs the real game loop and clicks the real buttons, including 700 random clicks with junk typed into text fields; any console error fails the test.
 
 ## Opening in Unity

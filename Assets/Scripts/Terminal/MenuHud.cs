@@ -267,6 +267,13 @@ namespace TradingEmpire.Terminal
             AddButton("Green and red", () => { GameSettings.SetColorBlind(false); _app.ApplySettings(); _dirty = true; }, 0, y, 200, 32, !Theme.ColorBlind ? Theme.Blue : (Color?)null);
             AddButton("Colour-blind (blue and orange)", () => { GameSettings.SetColorBlind(true); _app.ApplySettings(); _dirty = true; }, 210, y, 240, 32, Theme.ColorBlind ? Theme.Blue : (Color?)null);
             y += 56;
+            var l3 = Ui.Label(_content, "SOUND", 11, Theme.Accent, TextAnchor.MiddleLeft, false, true);
+            Ui.Place(l3.rectTransform, new Vector2(0, 1), new Vector2(1, 1), new Vector2(0, -y - 22), new Vector2(0, -y)); _dynamic.Add(l3.gameObject);
+            y += 28;
+            bool muted = _app.Audio != null && _app.Audio.Muted;
+            AddButton("Sound on", () => { if (_app.Audio != null) _app.Audio.SetMuted(false); _dirty = true; }, 0, y, 200, 32, !muted ? Theme.Blue : (Color?)null);
+            AddButton("Sound off", () => { if (_app.Audio != null) _app.Audio.SetMuted(true); _dirty = true; }, 210, y, 200, 32, muted ? Theme.Blue : (Color?)null);
+            y += 56;
             var tip = Ui.Label(_content, "Keys:  Space play or pause the market,  Right arrow next candle,  Shift+Right next bar,  L / S long or short,  mouse wheel zoom,  R rotate a building,  Esc cancel or back.", 12, Theme.Dim, TextAnchor.UpperLeft);
             tip.horizontalOverflow = HorizontalWrapMode.Wrap;
             Ui.Place(tip.rectTransform, new Vector2(0, 1), new Vector2(1, 1), new Vector2(0, -y - 80), new Vector2(0, -y)); _dynamic.Add(tip.gameObject);

@@ -25,6 +25,8 @@ namespace TradingEmpire.Core
         public int RunId, ReplayRevealed, ReplaySpeed;
         public long? ChartTfMs;
         public Dictionary<string, JournalEntry> Journal = new Dictionary<string, JournalEntry>();
+        /// <summary>Chart drawings per dataset id, kept exactly as saved.</summary>
+        public List<KeyValuePair<string, List<Drawing>>> Drawings = new List<KeyValuePair<string, List<Drawing>>>();
         public DatasetInfo Dataset;
         public long? DatasetTimeframeMs;
         public int? DatasetCount;
@@ -156,7 +158,7 @@ namespace TradingEmpire.Core
             var tradingObj = JsonValue.Obj()
                 .Set("account", JsonValue.Obj().Set("startingBalance", account.StartingBalance.Cents).Set("balance", account.Balance.Cents).Set("realizedPnl", account.RealizedPnl.Cents)
                     .Set("deposits", account.Deposits.Cents).Set("withdrawals", account.Withdrawals.Cents).Set("transactions", accTx).Set("open", open).Set("closed", closed))
-                .Set("runId", st.runId).Set("pending", pending).Set("drawings", JsonValue.Arr()).Set("journal", journal).Set("chartTfMs", st.chartTfMs)
+                .Set("runId", st.runId).Set("pending", pending).Set("drawings", DrawingsJson(world.Trading.Drawings)).Set("journal", journal).Set("chartTfMs", st.chartTfMs)
                 .Set("replay", JsonValue.Obj().Set("revealed", st.revealed).Set("speed", st.speed)).Set("dataset", dataset);
 
             return JsonValue.Obj()
@@ -171,6 +173,18 @@ namespace TradingEmpire.Core
                 .Set("achievements", ach).Set("challenges", challenges)
                 .Set("progression", JsonValue.Obj().Set("completed", completed).Set("peakTreasury", world.Progression.PeakTreasury.Cents))
                 .Set("settings", JsonValue.Obj());
+        }
+
+        static JsonValue DrawingsJson(DrawingStore store)
+        {
+            var arr = JsonValue.Arr();
+            foreach (var g in store.Snapshot())
+            {
+                var items = JsonValue.Arr();
+                foreach (var d in g.Value) items.Add(d.Data);
+                arr.Add(JsonValue.Obj().Set("datasetId", g.Key).Set("items", items));
+            }
+            return arr;
         }
 
         /// <summary>[time, open, high, low, close, volume | null, spreadPts | null]</summary>
@@ -398,6 +412,21 @@ namespace TradingEmpire.Core
             d.ReplaySpeed = (int)L(replay, "speed");
             if (Array.IndexOf(MarketReplay.Speeds, d.ReplaySpeed) < 0) throw new JsonException("\"replay.speed\" is not a valid speed");
             d.ChartTfMs = NL(trading, "chartTfMs");
+            var drawings = trading.Get("drawings");
+            if (drawings != null && drawings.Kind == JsonKind.Array)
+                foreach (var g in drawings.Array)
+                {
+                    var items = new List<Drawing>();
+                    var seenIds = new HashSet<string>();
+                    foreach (var item in A(g, "items"))
+                    {
+                        if (item.Kind != JsonKind.Object || item.Get("id") == null || item.Get("id").Kind != JsonKind.String || item.Get("kind") == null || item.Get("kind").Kind != JsonKind.String)
+                            throw new JsonException("a drawing has no id or kind");
+                        if (!seenIds.Add(item.Get("id").String)) throw new JsonException("duplicate drawing ids");
+                        items.Add(new Drawing(item));
+                    }
+                    d.Drawings.Add(new KeyValuePair<string, List<Drawing>>(S(g, "datasetId"), items));
+                }
             var journal = trading.Get("journal");
             if (journal != null && journal.Kind == JsonKind.Object)
                 foreach (var kv in journal.Members)
@@ -536,7 +565,7 @@ namespace TradingEmpire.Core
                 world.Clock.Restore(d.ClockTime, 0);
                 world.City.Restore(d.Buildings, d.Unlocked, d.LandTier, d.CityBalance, d.CityTransactions, d.Policies, d.Events, d.EventSeed);
                 var info = new DatasetInfo { Id = d.Dataset.Id, Name = d.Dataset.Name, Synthetic = d.Dataset.Synthetic, Symbol = d.Dataset.Symbol, Seed = d.Dataset.Seed, Total = candles.Count };
-                world.Trading.Restore(info, candles, d.ReplayRevealed, d.ReplaySpeed, d.RunId, d.Account, d.ChartTfMs, d.Journal);
+                world.Trading.Restore(info, candles, d.ReplayRevealed, d.ReplaySpeed, d.RunId, d.Account, d.ChartTfMs, d.Journal, d.Drawings);
                 world.Transfers.Restore(d.Transfers);
             })));
             world.Challenges.Restore(d.Challenges);

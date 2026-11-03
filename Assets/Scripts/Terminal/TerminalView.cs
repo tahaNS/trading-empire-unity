@@ -18,6 +18,7 @@ namespace TradingEmpire.Terminal
     {
         public TradingSession Session { get; private set; }
         public ChallengeController Challenges;
+        public ChartView Chart { get { return _chart; } }
 
         ChartView _chart;
         Text _symbol, _datasetName, _badge, _progress, _toast;
@@ -69,9 +70,12 @@ namespace TradingEmpire.Terminal
             if (session == Session) return;
             Session.Changed -= MarkDirty;
             Session.Journal.Changed -= OnJournalChanged;
+            Session.Drawings.Changed -= MarkDirty;
             Session = session;
             Session.Changed += MarkDirty;
             Session.Journal.Changed += OnJournalChanged;
+            Session.Drawings.Changed += MarkDirty;
+            _chart.Bind(Session);
             _tfBuiltFor = -1;
             _journalSig = null;
             _dirty = true;
@@ -98,6 +102,9 @@ namespace TradingEmpire.Terminal
             Ui.Place(chartHost, Vector2.zero, Vector2.one, new Vector2(8, bottomH + 8), new Vector2(-rightW - 16, -topH - 8));
             _chart = ChartView.Create(chartHost);
             Ui.Stretch((RectTransform)_chart.transform);
+            _chart.Bind(Session);
+            _chart.PlanFromPosition = PlanFrom;
+            Session.Drawings.Changed += MarkDirty;
 
             var right = Ui.Rect(root, "RightPanel");
             Ui.Place(right, new Vector2(1, 0), Vector2.one, new Vector2(-rightW - 8, bottomH + 8), new Vector2(-8, -topH - 8));
@@ -334,6 +341,20 @@ namespace TradingEmpire.Terminal
         }
 
         // ---------------------------------------------------------------- actions
+
+        /// <summary>A position box on the chart fills the order panel: its stop and target distances in pips.</summary>
+        void PlanFrom(Drawing d)
+        {
+            var a = d.GetAnchor("a"); var b = d.GetAnchor("b"); var c = d.GetAnchor("c");
+            if (!a.HasValue || !b.HasValue || !c.HasValue) return;
+            int pip = Session.Instrument.PipPoints;
+            _sl.text = (Math.Abs(a.Value.Price - c.Value.Price) / pip).ToString("0.#", CultureInfo.InvariantCulture);
+            _tp.text = (Math.Abs(b.Value.Price - a.Value.Price) / pip).ToString("0.#", CultureInfo.InvariantCulture);
+            _toast.text = "Order panel filled from the " + (d.Str("side") == "short" ? "short" : "long") + " box: press " + (d.Str("side") == "short" ? "SHORT" : "LONG") + " to trade it";
+            _toast.color = Theme.Text;
+            _toast.transform.parent.gameObject.SetActive(true);
+            _toastUntil = Time.unscaledTime + 4f;
+        }
 
         void Submit(Direction dir)
         {

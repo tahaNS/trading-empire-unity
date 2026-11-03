@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Linq;
 using TradingEmpire.Core;
 using TradingEmpire.Terminal;
 using UnityEditor;
@@ -100,6 +101,25 @@ namespace TradingEmpire.EditorTools
             var s = app.World.Trading;
             s.QuickOrder(Direction.Buy, 10, 20, 40);
             for (int i = 0; i < 8; i++) s.Step();
+            // chart drawings: a trend line, a Fibonacci, a box, a position plan, a note
+            {
+                var cd = s.ChartData();
+                var bars = cd.Candles;
+                int n = bars.Count;
+                var recent = bars.Skip(n - 60).ToList();
+                long hi = recent.Max(b => b.High), lo = recent.Min(b => b.Low);
+                var low = recent.First(b => b.Low == lo); var high = recent.Last(b => b.High == hi);
+                long tf = cd.TfMs;
+                var trendId = s.Drawings.Add(DrawingKinds.Trend(new Anchor(bars[n - 50].Time, bars[n - 50].Low), new Anchor(bars[n - 12].Time, bars[n - 12].High), "#f2c25b"));
+                s.Drawings.Add(DrawingKinds.Make("fib", "#6ea8ff", ("a", new Anchor(low.Time, lo)), ("b", new Anchor(high.Time, hi))));
+                s.Drawings.Add(DrawingKinds.Make("rect", "#c792ea", ("a", new Anchor(bars[n - 36].Time, hi - 4 * cd.PipPoints)), ("b", new Anchor(bars[n - 24].Time, hi - 12 * cd.PipPoints))));
+                s.Drawings.Add(DrawingKinds.HLine(lo + 2 * cd.PipPoints, "#2fcfae"));
+                long close = bars[n - 6].Close;
+                s.Drawings.Add(DrawingKinds.Position(true, new Anchor(bars[n - 6].Time, close), bars[n - 6].Time + 14 * tf, close + 20 * cd.PipPoints, close - 10 * cd.PipPoints, "#2fcfae"));
+                s.Drawings.Add(DrawingKinds.Text(new Anchor(bars[n - 46].Time, hi), "resistance zone", "#e6edf3"));
+                s.Drawings.Add(DrawingKinds.Marker(new Anchor(low.Time, lo), true, "#2fcfae"));
+                app.Terminal.Chart.Select(trendId);
+            }
             Shot(app, cam, rt, prefix + "-terminal.png");
 
             // the journal: close the trade and write about it

@@ -119,6 +119,7 @@ namespace TradingEmpire.Terminal
             colors.disabledColor = new Color(1, 1, 1, 0.4f);
             b.colors = colors;
             b.targetGraphic = img;
+            b.onClick.AddListener(() => AudioManager.Click());
             if (onClick != null) b.onClick.AddListener(() => onClick());
             var t = Label(rt, label, size, textColor ?? Theme.Text, TextAnchor.MiddleCenter, false, true);
             t.name = "Label";

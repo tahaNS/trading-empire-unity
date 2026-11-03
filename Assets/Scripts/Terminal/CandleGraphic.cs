@@ -23,10 +23,14 @@ namespace TradingEmpire.Terminal
     {
         public const float AxisRight = 78f;
         public const float AxisBottom = 24f;
+        /// <summary>Room on the left for the drawing tools.</summary>
+        public const float LeftMargin = 42f;
 
         public IReadOnlyList<Candle> Bars = new List<Candle>();
         public List<ChartLine> Lines = new List<ChartLine>();
         public List<ChartMarker> Markers = new List<ChartMarker>();
+        /// <summary>The chart drawings, already in chart-local pixels (built by the chart view).</summary>
+        public DrawingScene Scene;
         public int Digits = 5;
         public long TfMs = 60000;
         /// <summary>How many bars fit across the plot (the mouse wheel changes it).</summary>
@@ -50,11 +54,40 @@ namespace TradingEmpire.Terminal
             return Plot.xMin + (barIndex - FirstIndex + 0.5f) * Step;
         }
 
+        /// <summary>Fractional bar index of a time: between bars it interpolates, beyond the last bar it continues at one bar per timeframe.</summary>
+        public double IndexOfTime(long t)
+        {
+            int n = Bars.Count;
+            if (n == 0) return 0;
+            long first = Bars[0].Time, last = Bars[n - 1].Time;
+            if (t >= last) return n - 1 + (t - last) / (double)TfMs;
+            if (t <= first) return (t - first) / (double)TfMs;
+            int lo = 0, hi = n - 1;
+            while (hi - lo > 1) { int mid = (lo + hi) / 2; if (Bars[mid].Time <= t) lo = mid; else hi = mid; }
+            long span = Bars[hi].Time - Bars[lo].Time;
+            return lo + (span > 0 ? (t - Bars[lo].Time) / (double)span : 0);
+        }
+
+        public long TimeOfIndex(double idx)
+        {
+            int n = Bars.Count;
+            if (n == 0) return 0;
+            if (idx >= n - 1) return Bars[n - 1].Time + (long)Math.Round((idx - (n - 1)) * TfMs);
+            if (idx <= 0) return Bars[0].Time + (long)Math.Round(idx * TfMs);
+            int lo = (int)Math.Floor(idx);
+            double frac = idx - lo;
+            return Bars[lo].Time + (long)Math.Round(frac * (Bars[lo + 1].Time - Bars[lo].Time));
+        }
+
+        public float XOfTime(long t) { return Plot.xMin + (float)(IndexOfTime(t) - FirstIndex + 0.5) * Step; }
+        public long TimeOfX(float x) { return TimeOfIndex((x - Plot.xMin) / Step + FirstIndex - 0.5); }
+        public double PriceOfY(float y) { return Lo + (y - Plot.yMin) / Plot.height * (double)(Hi - Lo); }
+
         /// <summary>Work out the plot rectangle, visible bars and price range (also used to place the axis labels).</summary>
         public void ComputeLayout()
         {
             var r = GetPixelAdjustedRect();
-            Plot = new Rect(r.xMin + 6, r.yMin + AxisBottom, r.width - AxisRight - 6, r.height - AxisBottom - 6);
+            Plot = new Rect(r.xMin + LeftMargin, r.yMin + AxisBottom, r.width - AxisRight - LeftMargin, r.height - AxisBottom - 6);
             int total = Bars.Count;
             if (total == 0 || Plot.width < 20 || Plot.height < 20) { Count = 0; return; }
 
@@ -101,6 +134,7 @@ namespace TradingEmpire.Terminal
 
             foreach (var l in Lines) DrawLine(vh, l);
             foreach (var m in Markers) DrawMarker(vh, m);
+            if (Scene != null) DrawScene(vh);
         }
 
         void DrawLine(VertexHelper vh, ChartLine l)
@@ -124,6 +158,58 @@ namespace TradingEmpire.Terminal
             Color col = buy ? Theme.Bull : Theme.Bear;
             float dir = buy ? -1f : 1f; // buys point up from below, sells point down from above
             Tri(vh, new Vector2(x, y), new Vector2(x - s, y + dir * s * 1.6f), new Vector2(x + s, y + dir * s * 1.6f), col);
+        }
+
+        // ---------- chart drawings ----------
+
+        void DrawScene(VertexHelper vh)
+        {
+            foreach (var f in Scene.Fills) Fan(vh, f.Points, f.Color);
+            foreach (var t in Scene.Triangles) Tri(vh, t.P[0], t.P[1], t.P[2], t.Color);
+            foreach (var l in Scene.Lines)
+            {
+                if (l.Dashed) Dashes(vh, l, 9f, 5f);
+                else if (l.Dotted) Dashes(vh, l, 4f, 2f);
+                else Segment(vh, l.A, l.B, l.Width, l.Color);
+            }
+            foreach (var h in Scene.Handles) { Quad(vh, h.At.x - 5, h.At.y - 5, h.At.x + 5, h.At.y + 5, Color.white); Quad(vh, h.At.x - 3.5f, h.At.y - 3.5f, h.At.x + 3.5f, h.At.y + 3.5f, new Color(0.25f, 0.52f, 0.96f)); }
+        }
+
+        void Dashes(VertexHelper vh, SceneLine l, float dash, float gap)
+        {
+            var d = l.B - l.A;
+            float len = d.magnitude;
+            if (len < 0.5f) return;
+            var dir = d / len;
+            for (float t = 0; t < len; t += dash + gap) Segment(vh, l.A + dir * t, l.A + dir * Mathf.Min(t + dash, len), l.Width, l.Color);
+        }
+
+        /// <summary>A line of a given pixel width, as a rotated quad.</summary>
+        void Segment(VertexHelper vh, Vector2 a, Vector2 b, float width, Color c)
+        {
+            var d = b - a;
+            if (d.sqrMagnitude < 1e-4f) return;
+            var n = new Vector2(-d.y, d.x).normalized * (Mathf.Max(width, 1f) / 2f);
+            int i = vh.currentVertCount;
+            var v = UIVertex.simpleVert;
+            v.color = c;
+            v.position = a - n; vh.AddVert(v);
+            v.position = a + n; vh.AddVert(v);
+            v.position = b + n; vh.AddVert(v);
+            v.position = b - n; vh.AddVert(v);
+            vh.AddTriangle(i, i + 1, i + 2);
+            vh.AddTriangle(i + 2, i + 3, i);
+        }
+
+        /// <summary>A filled convex-ish polygon (a triangle fan from its first point).</summary>
+        void Fan(VertexHelper vh, Vector2[] pts, Color c)
+        {
+            if (pts.Length < 3) return;
+            int i = vh.currentVertCount;
+            var v = UIVertex.simpleVert;
+            v.color = c;
+            foreach (var p in pts) { v.position = p; vh.AddVert(v); }
+            for (int k = 1; k + 1 < pts.Length; k++) { vh.AddTriangle(i, i + k, i + k + 1); vh.AddTriangle(i, i + k + 1, i + k); }
         }
 
         // ---------- mesh helpers ----------

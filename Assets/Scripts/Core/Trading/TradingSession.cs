@@ -104,6 +104,8 @@ namespace TradingEmpire.Core
         public readonly TradingAccount Account;
         /// <summary>Notes, tags and ratings for closed trades (saved with the game).</summary>
         public readonly JournalStore Journal = new JournalStore();
+        /// <summary>Chart drawings, per dataset (saved with the game).</summary>
+        public readonly DrawingStore Drawings = new DrawingStore();
         /// <summary>Raised after any change to <see cref="State"/>.</summary>
         public event Action Changed;
         public SessionState State { get; private set; }
@@ -162,6 +164,7 @@ namespace TradingEmpire.Core
                 Seed = seed, Name = name, Synthetic = synthetic, Symbol = Instrument.Symbol,
                 Total = candles.Count, TimeframeMs = _timeframeMs,
             };
+            Drawings.SetDataset(dataset.Id);
             State = Build(SessionStatus.Ready, dataset);
             State.Report = report;
             Notify(NoticeKind.Info, "Loaded " + candles.Count.ToString("N0", CultureInfo.InvariantCulture) + " candles" + (synthetic ? " (synthetic test data)" : ""));
@@ -236,7 +239,7 @@ namespace TradingEmpire.Core
         /// <paramref name="revealed"/> are re-revealed (with no positions open, so SL/TP never re-fire), then the saved account is restored.
         /// </summary>
         public void Restore(DatasetInfo dataset, IReadOnlyList<Candle> candles, int revealed, int speed, int runId, AccountSnapshot account,
-            long? chartTfMs = null, IReadOnlyDictionary<string, JournalEntry> journal = null)
+            long? chartTfMs = null, IReadOnlyDictionary<string, JournalEntry> journal = null, IEnumerable<KeyValuePair<string, List<Drawing>>> drawings = null)
         {
             if (_replay != null) _replay.Pause();
             UseInstrument(Instruments.Find(dataset.Symbol) ?? Instruments.EURUSD);
@@ -256,6 +259,7 @@ namespace TradingEmpire.Core
             Account.Restore(account);
             _engine.ResumeIds(account.Open.Concat(account.Closed), account.Pending);
             Journal.Restore(journal ?? new Dictionary<string, JournalEntry>());
+            Drawings.Restore(drawings ?? new List<KeyValuePair<string, List<Drawing>>>(), dataset.Id);
             var info = new DatasetInfo
             {
                 Id = dataset.Id, Seed = dataset.Seed, Name = dataset.Name, Synthetic = dataset.Synthetic, Symbol = Instrument.Symbol,
