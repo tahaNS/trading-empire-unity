@@ -43,7 +43,7 @@ namespace TradingEmpire.Terminal
 
             _chBanner = Ui.Rect(root, "ChallengeBanner");
             Ui.Place(_chBanner, new Vector2(0, 1), new Vector2(1, 1), new Vector2(8, -122), new Vector2(-346, -88));
-            Ui.Box(_chBanner, "Bg", new Color(0.35f, 0.25f, 0.05f, 0.95f)).rectTransform.SetAsFirstSibling();
+            Ui.Panel(_chBanner, "Bg", new Color(0.35f, 0.25f, 0.05f, 0.95f)).rectTransform.SetAsFirstSibling();
             Ui.Stretch((RectTransform)_chBanner.Find("Bg"));
             _chBannerText = Ui.Label(_chBanner, "", 12, Theme.Accent, TextAnchor.MiddleLeft, true, true);
             Ui.Place(_chBannerText.rectTransform, Vector2.zero, Vector2.one, new Vector2(10, 0), new Vector2(-230, 0));
@@ -64,7 +64,7 @@ namespace TradingEmpire.Terminal
             dim.raycastTarget = true;
             window = Ui.Rect(m, "Window");
             Ui.Place(window, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(-w / 2, -h / 2), new Vector2(w / 2, h / 2));
-            Ui.Box(window, "Bg", new Color(0.09f, 0.12f, 0.17f, 1f)).rectTransform.SetAsFirstSibling();
+            Ui.Panel(window, "Bg", new Color(0.09f, 0.12f, 0.17f, 1f)).rectTransform.SetAsFirstSibling();
             Ui.Stretch((RectTransform)window.Find("Bg"));
             return m;
         }

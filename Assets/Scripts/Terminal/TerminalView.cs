@@ -116,7 +116,7 @@ namespace TradingEmpire.Terminal
         {
             var bar = Ui.Rect(root, "TopBar");
             Ui.Place(bar, new Vector2(0, 1), Vector2.one, new Vector2(8, -76), new Vector2(-8, -8));
-            Ui.Box(bar, "Bg", Theme.Panel).rectTransform.SetAsFirstSibling();
+            Ui.Panel(bar, "Bg", Theme.Panel).rectTransform.SetAsFirstSibling();
             Ui.Stretch((RectTransform)bar.Find("Bg"));
 
             // row 1: identity
@@ -187,7 +187,7 @@ namespace TradingEmpire.Terminal
             // account card
             var acct = Ui.Rect(right, "Account");
             Ui.Place(acct, new Vector2(0, 0.52f), Vector2.one, new Vector2(0, 4), Vector2.zero);
-            Ui.Box(acct, "Bg", Theme.Panel).rectTransform.SetAsFirstSibling();
+            Ui.Panel(acct, "Bg", Theme.Panel).rectTransform.SetAsFirstSibling();
             Ui.Stretch((RectTransform)acct.Find("Bg"));
             var head = Ui.Label(acct, "ACCOUNT", 12, Theme.Accent, TextAnchor.MiddleLeft, false, true);
             Ui.Place(head.rectTransform, new Vector2(0, 1), new Vector2(1, 1), new Vector2(12, -26), new Vector2(-12, -4));
@@ -205,7 +205,7 @@ namespace TradingEmpire.Terminal
             // order card
             var order = Ui.Rect(right, "Order");
             Ui.Place(order, Vector2.zero, new Vector2(1, 0.52f), Vector2.zero, new Vector2(0, -4));
-            Ui.Box(order, "Bg", Theme.Panel).rectTransform.SetAsFirstSibling();
+            Ui.Panel(order, "Bg", Theme.Panel).rectTransform.SetAsFirstSibling();
             Ui.Stretch((RectTransform)order.Find("Bg"));
             var oh = Ui.Label(order, "ORDER", 12, Theme.Accent, TextAnchor.MiddleLeft, false, true);
             Ui.Place(oh.rectTransform, new Vector2(0, 1), new Vector2(1, 1), new Vector2(12, -26), new Vector2(-12, -4));
@@ -244,7 +244,7 @@ namespace TradingEmpire.Terminal
 
         void BuildBottomPanel(RectTransform bottom)
         {
-            Ui.Box(bottom, "Bg", Theme.Panel).rectTransform.SetAsFirstSibling();
+            Ui.Panel(bottom, "Bg", Theme.Panel).rectTransform.SetAsFirstSibling();
             Ui.Stretch((RectTransform)bottom.Find("Bg"));
             string[] names = { "Open positions", "Orders", "History", "Journal", "Statistics" };
             float x = 10;
@@ -278,7 +278,7 @@ namespace TradingEmpire.Terminal
         {
             _loadPopover = Ui.Rect(root, "LoadPopover");
             Ui.Place(_loadPopover, new Vector2(1, 1), new Vector2(1, 1), new Vector2(-520, -250), new Vector2(-12, -86));
-            Ui.Box(_loadPopover, "Bg", new Color(0.09f, 0.12f, 0.17f, 0.99f)).rectTransform.SetAsFirstSibling();
+            Ui.Panel(_loadPopover, "Bg", new Color(0.09f, 0.12f, 0.17f, 0.99f)).rectTransform.SetAsFirstSibling();
             Ui.Stretch((RectTransform)_loadPopover.Find("Bg"));
 
             var h = Ui.Label(_loadPopover, "LOAD A CSV / MT4 / MT5 FILE", 12, Theme.Accent, TextAnchor.MiddleLeft, false, true);
@@ -360,7 +360,9 @@ namespace TradingEmpire.Terminal
 
         void HandleKeys()
         {
-            if (GUIUtility.keyboardControl != 0 || UnityEngine.EventSystems.EventSystem.current?.currentSelectedGameObject?.GetComponent<InputField>() != null) return;
+            // typing in a text field must never trigger the game's shortcuts
+            var selected = UnityEngine.EventSystems.EventSystem.current != null ? UnityEngine.EventSystems.EventSystem.current.currentSelectedGameObject : null;
+            if (selected != null && selected.GetComponent<InputField>() != null) return;
             if (Input.GetKeyDown(KeyCode.Escape) && _onBack != null) _onBack();
             if (Input.GetKeyDown(KeyCode.Space)) Session.TogglePlay();
             if (Input.GetKeyDown(KeyCode.RightArrow)) { if (Input.GetKey(KeyCode.LeftShift) || Input.GetKey(KeyCode.RightShift)) Session.StepBar(); else Session.Step(); }

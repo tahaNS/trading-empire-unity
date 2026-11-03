@@ -61,7 +61,7 @@ namespace TradingEmpire.Terminal
             // top bar
             var bar = Ui.Rect(root, "TopBar");
             Ui.Place(bar, new Vector2(0, 1), Vector2.one, new Vector2(8, -64), new Vector2(-8, -8));
-            Ui.Box(bar, "Bg", new Color(Theme.Panel.r, Theme.Panel.g, Theme.Panel.b, 0.96f)).rectTransform.SetAsFirstSibling();
+            Ui.Panel(bar, "Bg", new Color(Theme.Panel.r, Theme.Panel.g, Theme.Panel.b, 0.96f)).rectTransform.SetAsFirstSibling();
             Ui.Stretch((RectTransform)bar.Find("Bg"));
 
             _date = Ui.Label(bar, "", 14, Theme.Text, TextAnchor.MiddleLeft, false, true);
@@ -122,7 +122,7 @@ namespace TradingEmpire.Terminal
         {
             var bar = Ui.Rect(root, "BuildBar");
             Ui.Place(bar, Vector2.zero, new Vector2(1, 0), new Vector2(8, 8), new Vector2(-8, 88));
-            Ui.Box(bar, "Bg", new Color(Theme.Panel.r, Theme.Panel.g, Theme.Panel.b, 0.96f)).rectTransform.SetAsFirstSibling();
+            Ui.Panel(bar, "Bg", new Color(Theme.Panel.r, Theme.Panel.g, Theme.Panel.b, 0.96f)).rectTransform.SetAsFirstSibling();
             Ui.Stretch((RectTransform)bar.Find("Bg"));
             var hint = Ui.Label(bar, "BUILD   (click a building, then the map. R rotates, Esc cancels)", 11, Theme.Dim, TextAnchor.MiddleLeft, false, true);
             Ui.Place(hint.rectTransform, new Vector2(0, 1), Vector2.one, new Vector2(10, -20), new Vector2(-10, -2));
@@ -142,7 +142,7 @@ namespace TradingEmpire.Terminal
         {
             _inspector = Ui.Rect(root, "Inspector");
             Ui.Place(_inspector, new Vector2(1, 0), new Vector2(1, 1), new Vector2(-330, 100), new Vector2(-8, -72));
-            Ui.Box(_inspector, "Bg", new Color(Theme.Panel.r, Theme.Panel.g, Theme.Panel.b, 0.97f)).rectTransform.SetAsFirstSibling();
+            Ui.Panel(_inspector, "Bg", new Color(Theme.Panel.r, Theme.Panel.g, Theme.Panel.b, 0.97f)).rectTransform.SetAsFirstSibling();
             Ui.Stretch((RectTransform)_inspector.Find("Bg"));
             _inspectorTitle = Ui.Label(_inspector, "", 16, Theme.Text, TextAnchor.MiddleLeft, false, true);
             Ui.Place(_inspectorTitle.rectTransform, new Vector2(0, 1), Vector2.one, new Vector2(12, -36), new Vector2(-12, -6));
@@ -160,7 +160,7 @@ namespace TradingEmpire.Terminal
         {
             _transferPanel = Ui.Rect(root, "TransferPanel");
             Ui.Place(_transferPanel, new Vector2(0, 1), new Vector2(0, 1), new Vector2(8, -330), new Vector2(470, -72));
-            Ui.Box(_transferPanel, "Bg", new Color(0.09f, 0.12f, 0.17f, 0.99f)).rectTransform.SetAsFirstSibling();
+            Ui.Panel(_transferPanel, "Bg", new Color(0.09f, 0.12f, 0.17f, 0.99f)).rectTransform.SetAsFirstSibling();
             Ui.Stretch((RectTransform)_transferPanel.Find("Bg"));
             var h = Ui.Label(_transferPanel, "CAPITAL TRANSFER", 12, Theme.Accent, TextAnchor.MiddleLeft, false, true);
             Ui.Place(h.rectTransform, new Vector2(0, 1), Vector2.one, new Vector2(12, -26), new Vector2(-12, -4));
@@ -195,7 +195,7 @@ namespace TradingEmpire.Terminal
             _policyPanel = Ui.Rect(root, "PolicyPanel");
             float h = 44 + Modifiers.Policies.Count * 84;
             Ui.Place(_policyPanel, new Vector2(0, 1), new Vector2(0, 1), new Vector2(8, -72 - h), new Vector2(470, -72));
-            Ui.Box(_policyPanel, "Bg", new Color(0.09f, 0.12f, 0.17f, 0.99f)).rectTransform.SetAsFirstSibling();
+            Ui.Panel(_policyPanel, "Bg", new Color(0.09f, 0.12f, 0.17f, 0.99f)).rectTransform.SetAsFirstSibling();
             Ui.Stretch((RectTransform)_policyPanel.Find("Bg"));
             var head = Ui.Label(_policyPanel, "POLICIES", 12, Theme.Accent, TextAnchor.MiddleLeft, false, true);
             Ui.Place(head.rectTransform, new Vector2(0, 1), Vector2.one, new Vector2(12, -26), new Vector2(-12, -4));

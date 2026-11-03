@@ -60,7 +60,7 @@ namespace TradingEmpire.Terminal
             // goal card: the next mission, with a progress bar
             _goal = Ui.Rect(root, "Goal");
             Ui.Place(_goal, new Vector2(0, 0), new Vector2(0, 0), new Vector2(8, 96), new Vector2(358, 190));
-            Ui.Box(_goal, "Bg", new Color(Theme.Panel.r, Theme.Panel.g, Theme.Panel.b, 0.96f)).rectTransform.SetAsFirstSibling();
+            Ui.Panel(_goal, "Bg", new Color(Theme.Panel.r, Theme.Panel.g, Theme.Panel.b, 0.96f)).rectTransform.SetAsFirstSibling();
             Ui.Stretch((RectTransform)_goal.Find("Bg"));
             _goalTitle = Ui.Label(_goal, "", 13, Theme.Accent, TextAnchor.MiddleLeft, false, true);
             Ui.Place(_goalTitle.rectTransform, new Vector2(0, 1), Vector2.one, new Vector2(12, -26), new Vector2(-12, -4));
@@ -82,7 +82,7 @@ namespace TradingEmpire.Terminal
             dim.raycastTarget = true;
             var win = Ui.Rect(_modal, "Window");
             Ui.Place(win, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(-340, -300), new Vector2(340, 300));
-            Ui.Box(win, "Bg", new Color(0.09f, 0.12f, 0.17f, 1f)).rectTransform.SetAsFirstSibling();
+            Ui.Panel(win, "Bg", new Color(0.09f, 0.12f, 0.17f, 1f)).rectTransform.SetAsFirstSibling();
             Ui.Stretch((RectTransform)win.Find("Bg"));
             _title = Ui.Label(win, "MENU", 14, Theme.Accent, TextAnchor.MiddleLeft, false, true);
             Ui.Place(_title.rectTransform, new Vector2(0, 1), new Vector2(1, 1), new Vector2(16, -34), new Vector2(-60, -6));
@@ -114,7 +114,7 @@ namespace TradingEmpire.Terminal
             odim.raycastTarget = true;
             var ow = Ui.Rect(_over, "Window");
             Ui.Place(ow, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(-260, -170), new Vector2(260, 170));
-            Ui.Box(ow, "Bg", new Color(0.12f, 0.09f, 0.11f, 1f)).rectTransform.SetAsFirstSibling();
+            Ui.Panel(ow, "Bg", new Color(0.12f, 0.09f, 0.11f, 1f)).rectTransform.SetAsFirstSibling();
             Ui.Stretch((RectTransform)ow.Find("Bg"));
             var oh = Ui.Label(ow, "GAME OVER", 24, Theme.Bear, TextAnchor.MiddleCenter, false, true);
             Ui.Place(oh.rectTransform, new Vector2(0, 1), new Vector2(1, 1), new Vector2(0, -60), new Vector2(0, -12));

@@ -43,5 +43,9 @@ dotnet test
 
 Not ported from the web version: chart drawings and indicators, order planning on the chart, sound, photo mode and fly-over, Electron packaging.
 
+## Tests
+- `cd Tests/Core.Tests && dotnet test` the game rules (169 tests, including a random-play stress test: many seeds of random trading, building, transfers, policies, challenges, with a save and reload every few steps).
+- **Window > General > Test Runner > PlayMode** (or `Unity -batchmode -runTests -testPlatform PlayMode`) runs the real game loop and clicks the real buttons, including 700 random clicks with junk typed into text fields; any console error fails the test.
+
 ## Opening in Unity
 Open the folder with Unity Hub (editor `6000.2.13f1`). Unity generates `.meta` files on first import; commit them afterwards.

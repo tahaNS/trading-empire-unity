@@ -78,6 +78,14 @@ namespace TradingEmpire.Terminal
             return img;
         }
 
+        /// <summary>A panel background that also blocks the mouse, so clicks on it never reach the 3D city underneath.</summary>
+        public static Image Panel(Transform parent, string name, Color color)
+        {
+            var img = Box(parent, name, color);
+            img.raycastTarget = true;
+            return img;
+        }
+
         public static Text Label(Transform parent, string text, int size, Color color, TextAnchor anchor = TextAnchor.MiddleLeft, bool mono = false, bool bold = false)
         {
             var rt = Rect(parent, "Text");
