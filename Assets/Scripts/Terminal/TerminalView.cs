@@ -82,7 +82,7 @@ namespace TradingEmpire.Terminal
         }
 
         /// <summary>Redraw immediately (used by the editor screenshot tool, where Update does not run).</summary>
-        public void RefreshNow() { _dirty = false; _barWidth = -1; _topFitWidth = -1; FitTopBar(); FitChartTop(); Refresh(); }
+        public void RefreshNow() { _dirty = false; _barWidth = -1; _topFitWidth = -1; FitRightColumn(); FitTopBar(); FitChartTop(); Refresh(); }
 
         public void SelectTab(int tab) { _tab = tab; _journalSig = null; _dirty = true; }
 
@@ -113,8 +113,20 @@ namespace TradingEmpire.Terminal
             var right = Ui.Rect(root, "RightPanel");
             _right = right;
             Ui.Place(right, new Vector2(1, 0), Vector2.one, new Vector2(-rightW - 8, 8), new Vector2(-8, -topH - 8)); // the full height: account, order and transfer stack in it
-            BuildRightPanel(right);
-            BuildTransferCard(right);
+            // the right column scrolls when the screen is too short for account, order and transfer together
+            var col = Ui.Rect(right, "Column");
+            col.anchorMin = new Vector2(0, 1); col.anchorMax = new Vector2(1, 1); col.pivot = new Vector2(0.5f, 1);
+            col.offsetMin = Vector2.zero; col.offsetMax = Vector2.zero;
+            col.sizeDelta = new Vector2(0, 820);
+            _rightCol = col;
+            var rightImg = right.gameObject.AddComponent<Image>();
+            rightImg.color = new Color(0, 0, 0, 0.001f);
+            right.gameObject.AddComponent<RectMask2D>();
+            var rightScroll = right.gameObject.AddComponent<ScrollRect>();
+            rightScroll.viewport = right; rightScroll.content = col; rightScroll.horizontal = false;
+            rightScroll.movementType = ScrollRect.MovementType.Clamped; rightScroll.scrollSensitivity = 24f;
+            BuildRightPanel(col);
+            BuildTransferCard(col);
 
             var bottom = Ui.Rect(root, "BottomPanel");
             _bottomPanel = bottom;
@@ -584,7 +596,31 @@ namespace TradingEmpire.Terminal
             _tabBody = Ui.Label(_tabContent, "", 12, Theme.Text, TextAnchor.UpperLeft, true);
             _tabBody.verticalOverflow = VerticalWrapMode.Truncate;
             _positionRows = Ui.Rect(_tabContent, "Rows");
-            Ui.Stretch(_positionRows);
+            // the tab content scrolls (mouse wheel) when it is taller than the panel, so nothing is ever cut off
+            var tabImg = _tabContent.gameObject.AddComponent<Image>();
+            tabImg.color = new Color(0, 0, 0, 0.001f);
+            _tabContent.gameObject.AddComponent<RectMask2D>();
+            _positionRows.anchorMin = new Vector2(0, 1); _positionRows.anchorMax = new Vector2(1, 1); _positionRows.pivot = new Vector2(0.5f, 1);
+            _positionRows.offsetMin = Vector2.zero; _positionRows.offsetMax = Vector2.zero;
+            _tabScroll = _tabContent.gameObject.AddComponent<ScrollRect>();
+            _tabScroll.viewport = _tabContent; _tabScroll.content = _positionRows; _tabScroll.horizontal = false;
+            _tabScroll.movementType = ScrollRect.MovementType.Clamped; _tabScroll.scrollSensitivity = 24f;
+        }
+
+        ScrollRect _tabScroll;
+
+        /// <summary>Size the scrolling area to what the tab built (rows hang from the top), at least as tall as the panel.</summary>
+        void FitRowsHeight()
+        {
+            float needed = 0;
+            foreach (Transform child in _positionRows)
+            {
+                var rt = (RectTransform)child;
+                if (!rt.gameObject.activeSelf) continue;
+                needed = Mathf.Max(needed, -rt.offsetMin.y);
+            }
+            float view = _tabContent.rect.height;
+            _positionRows.sizeDelta = new Vector2(0, Mathf.Max(view, needed + 6f));
         }
 
         void BuildToast(RectTransform root)
@@ -685,7 +721,7 @@ namespace TradingEmpire.Terminal
 
         // ---------------------------------------------------------------- per-frame
 
-        RectTransform _topBar;
+        RectTransform _topBar, _rightCol;
         float _barWidth = -1;
 
         /// <summary>The top bar is laid out for about 1640 pixels; on a narrower screen it scales down (keeping the full width) so nothing overlaps.</summary>
@@ -702,8 +738,16 @@ namespace TradingEmpire.Terminal
             _topBar.offsetMax = new Vector2(inner / scale - width + 8f, -8f);
         }
 
+        void FitRightColumn()
+        {
+            if (_rightCol == null) return;
+            float h = Mathf.Max(((RectTransform)_rightCol.parent).rect.height, 820f);
+            if (!Mathf.Approximately(_rightCol.sizeDelta.y, h)) _rightCol.sizeDelta = new Vector2(0, h);
+        }
+
         void Update()
         {
+            FitRightColumn();
             FitTopBar();
             FitChartTop();
             HandleKeys();
@@ -755,6 +799,7 @@ namespace TradingEmpire.Terminal
             RefreshOrder();
             RefreshTransfer();
             RefreshTabs(s, inst);
+            FitRowsHeight();
 
             if (s.Notice != null && s.Notice.Seq != _lastToastSeq)
             {

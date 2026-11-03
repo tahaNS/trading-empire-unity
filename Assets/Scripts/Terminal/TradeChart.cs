@@ -126,14 +126,19 @@ namespace TradingEmpire.Terminal
             }
             chart.Layout(new Rect(0f, 0f, place.width, place.height));
             int digits = Instruments.DigitsFor(p.Symbol, session.Instrument.Digits);
+            var usedY = new List<float>();
             Action<long?, string, Color> label = (price, name, col) =>
             {
                 if (!price.HasValue) return;
+                // two prices close together would print on top of each other: the later label moves down a line
+                float yy = chart.YOf(price.Value);
+                foreach (var u in usedY.ToArray()) if (Mathf.Abs(u - yy) < 12f) yy = u - 12f;
+                usedY.Add(yy);
                 var t = Ui.Label(root, name + " " + Units.FormatPrice(price.Value, digits), 10, col, TextAnchor.MiddleLeft, true);
                 var rt = t.rectTransform;
                 rt.anchorMin = rt.anchorMax = new Vector2(0, 0); rt.pivot = new Vector2(0, 0.5f);
                 rt.sizeDelta = new Vector2(Axis + 4, 12);
-                rt.anchoredPosition = new Vector2(place.width - Axis + 3, chart.YOf(price.Value));
+                rt.anchoredPosition = new Vector2(place.width - Axis + 3, Mathf.Clamp(yy, 6f, place.height - 6f));
             };
             label(p.TakeProfit, "TP", Theme.Bull);
             label(p.StopLoss, "SL", Theme.Bear);

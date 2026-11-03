@@ -190,6 +190,15 @@ namespace TradingEmpire.EditorTools
             s.Journal.Set(JournalStore.KeyOf(closed[1]), "Chased it after missing the move.", new[] { "FOMO", "Chased price" }, 2);
             app.Terminal.SelectTab(3);
             Shot(app, cam, rt, prefix + "-journal.png");
+            scaler.scaleFactor = 1.35f;
+            app.Terminal.SelectTab(3);
+            Shot(app, cam, rt, prefix + "-journal-large.png");
+            app.Terminal.SelectTab(0);
+            Shot(app, cam, rt, prefix + "-positions-large.png");
+            app.Terminal.SelectTab(4);
+            Shot(app, cam, rt, prefix + "-stats-large.png");
+            scaler.scaleFactor = 1f;
+            app.Terminal.SelectTab(3);
 
             // the challenge list, and a challenge run
             app.Terminal.SelectTab(0);

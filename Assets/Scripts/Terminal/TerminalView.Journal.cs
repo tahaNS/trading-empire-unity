@@ -45,7 +45,8 @@ namespace TradingEmpire.Terminal
                     + (listW >= 400 ? "  " + Stars(e.Rating) + (e.Note.Length > 0 || e.Tags.Count > 0 ? "  *" : "") : "");
                 var row = Ui.Button(_positionRows, label, () => { _journalKey = key; _journalSig = null; _dirty = true; }, key == _journalKey ? Theme.Blue : Theme.PanelAlt, 11);
                 var t = row.transform.Find("Label").GetComponent<Text>();
-                t.alignment = TextAnchor.MiddleLeft; t.fontStyle = FontStyle.Normal; t.font = Theme.Mono;
+                t.alignment = TextAnchor.MiddleLeft; t.fontStyle = FontStyle.Normal; t.font = Theme.Mono; t.fontSize = listW < 330 ? 10 : 11;
+                t.horizontalOverflow = HorizontalWrapMode.Wrap; t.verticalOverflow = VerticalWrapMode.Truncate;
                 Ui.Stretch(t.rectTransform, 8, 0, 4, 0);
                 Ui.Place((RectTransform)row.transform, new Vector2(0, 1), new Vector2(0, 1), new Vector2(0, -(i + 1) * 23), new Vector2(listW, -i * 23 - 1));
                 _rows.Add(row.gameObject);
@@ -98,23 +99,29 @@ namespace TradingEmpire.Terminal
             var wb = box(x0 + 290, 74, Mathf.Max(0, rw - 290), 24);
             why.horizontalOverflow = HorizontalWrapMode.Wrap;
             Ui.Place(why.rectTransform, new Vector2(0, 1), new Vector2(0, 1), wb.Item1, wb.Item2);
-            _rows.Add(why.gameObject);
+            if (rw - 290 < 140) Ui.Kill(why.gameObject); // no room beside the rating buttons: leave the note out rather than let it wrap into a column
+            else _rows.Add(why.gameObject);
 
             var tl = Ui.Label(_positionRows, "TAGS", 10, Theme.Dim, TextAnchor.MiddleLeft, false, true);
             var tgb = box(x0, 104, 100, 14);
             Ui.Place(tl.rectTransform, new Vector2(0, 1), new Vector2(0, 1), tgb.Item1, tgb.Item2);
             _rows.Add(tl.gameObject);
-            int cols = Mathf.Max(3, (int)(rw / 78f));
-            float cw = rw / cols;
+            // the tags flow like words: as many per line as fit, and the chips shrink when the panel is short
+            float availH = Mathf.Max(40f, (_tabContent.rect.height < 60 ? 190f : _tabContent.rect.height) - 122f);
+            float chipH = availH >= 3 * 28 ? 24f : availH >= 2 * 26 ? 22f : 18f;
+            int fontSize = chipH >= 22f ? 10 : 9;
+            float cx = 0, cy = 0;
             for (int i = 0; i < JournalStore.PresetTags.Length; i++)
             {
                 string tag = JournalStore.PresetTags[i];
                 bool on = entry.Tags.Any(x => string.Equals(x, tag, StringComparison.OrdinalIgnoreCase));
-                var b = Ui.Button(_positionRows, tag, () => Session.Journal.ToggleTag(key2, tag), on ? Theme.Blue : Theme.PanelAlt, 10);
-                int col = i % cols, row = i / cols;
-                var cb = box(x0 + col * cw, 122 + row * 28, cw - 4, 24);
+                float w = Mathf.Min(rw, tag.Length * (fontSize * 0.62f) + 20f);
+                if (cx + w > rw && cx > 0) { cx = 0; cy += chipH + 4f; }
+                var b = Ui.Button(_positionRows, tag, () => Session.Journal.ToggleTag(key2, tag), on ? Theme.Blue : Theme.PanelAlt, fontSize);
+                var cb = box(x0 + cx, 122 + cy, w, chipH);
                 Ui.Place((RectTransform)b.transform, new Vector2(0, 1), new Vector2(0, 1), cb.Item1, cb.Item2);
                 _rows.Add(b.gameObject);
+                cx += w + 4f;
             }
         }
 
