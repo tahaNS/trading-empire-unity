@@ -1,0 +1,17 @@
+{
+  "name": "TradingEmpire.Terminal",
+  "rootNamespace": "TradingEmpire.Terminal",
+  "references": [
+    "TradingEmpire.Core",
+    "UnityEngine.UI"
+  ],
+  "includePlatforms": [],
+  "excludePlatforms": [],
+  "allowUnsafeCode": false,
+  "overrideReferences": false,
+  "precompiledReferences": [],
+  "autoReferenced": true,
+  "defineConstraints": [],
+  "versionDefines": [],
+  "noEngineReferences": false
+}
