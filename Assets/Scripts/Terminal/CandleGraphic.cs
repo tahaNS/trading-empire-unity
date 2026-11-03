@@ -298,6 +298,34 @@ namespace TradingEmpire.Terminal
             }
         }
 
+        /// <summary>Sutherland-Hodgman: the part of a polygon that lies inside a rectangle.</summary>
+        static Vector2[] ClipPolygon(Vector2[] poly, Rect r)
+        {
+            var cur = new List<Vector2>(poly);
+            for (int edge = 0; edge < 4 && cur.Count > 0; edge++)
+            {
+                var next = new List<Vector2>();
+                Func<Vector2, bool> inside = p => edge == 0 ? p.x >= r.xMin : edge == 1 ? p.x <= r.xMax : edge == 2 ? p.y >= r.yMin : p.y <= r.yMax;
+                Func<Vector2, Vector2, Vector2> cross = (a, b) =>
+                {
+                    float t;
+                    if (edge < 2) { float x = edge == 0 ? r.xMin : r.xMax; t = Mathf.Abs(b.x - a.x) < 1e-6f ? 0 : (x - a.x) / (b.x - a.x); return new Vector2(x, a.y + (b.y - a.y) * t); }
+                    float y = edge == 2 ? r.yMin : r.yMax; t = Mathf.Abs(b.y - a.y) < 1e-6f ? 0 : (y - a.y) / (b.y - a.y);
+                    return new Vector2(a.x + (b.x - a.x) * t, y);
+                };
+                for (int i = 0; i < cur.Count; i++)
+                {
+                    var a = cur[i]; var b = cur[(i + 1) % cur.Count];
+                    bool ai = inside(a), bi = inside(b);
+                    if (ai && bi) next.Add(b);
+                    else if (ai && !bi) next.Add(cross(a, b));
+                    else if (!ai && bi) { next.Add(cross(a, b)); next.Add(b); }
+                }
+                cur = next;
+            }
+            return cur.ToArray();
+        }
+
         static Color Hex(string s) { Color c; return ColorUtility.TryParseHtmlString(s, out c) ? c : Color.white; }
 
         /// <summary>Liang-Barsky: cut a segment to a rectangle (false when it lies entirely outside).</summary>
@@ -322,8 +350,8 @@ namespace TradingEmpire.Terminal
 
         void DrawScene(VertexHelper vh)
         {
-            foreach (var f in Scene.Fills) Fan(vh, f.Points, f.Color);
-            foreach (var t in Scene.Triangles) Tri(vh, t.P[0], t.P[1], t.P[2], t.Color);
+            foreach (var f in Scene.Fills) Fan(vh, ClipPolygon(f.Points, Plot), f.Color); // fills stay inside the plot, whatever the price range
+            foreach (var t in Scene.Triangles) { if (Plot.Contains(t.P[0]) || Plot.Contains(t.P[1]) || Plot.Contains(t.P[2])) Tri(vh, t.P[0], t.P[1], t.P[2], t.Color); }
             foreach (var line in Scene.Lines)
             {
                 var l = line;
@@ -334,7 +362,7 @@ namespace TradingEmpire.Terminal
                 else if (l.Dotted) Dashes(vh, l, 4f, 2f);
                 else Segment(vh, l.A, l.B, l.Width, l.Color);
             }
-            foreach (var h in Scene.Handles) { Quad(vh, h.At.x - 5, h.At.y - 5, h.At.x + 5, h.At.y + 5, Color.white); Quad(vh, h.At.x - 3.5f, h.At.y - 3.5f, h.At.x + 3.5f, h.At.y + 3.5f, new Color(0.25f, 0.52f, 0.96f)); }
+            foreach (var h in Scene.Handles) { if (!Plot.Contains(h.At)) continue; Quad(vh, h.At.x - 5, h.At.y - 5, h.At.x + 5, h.At.y + 5, Color.white); Quad(vh, h.At.x - 3.5f, h.At.y - 3.5f, h.At.x + 3.5f, h.At.y + 3.5f, new Color(0.25f, 0.52f, 0.96f)); }
         }
 
         void Dashes(VertexHelper vh, SceneLine l, float dash, float gap)
