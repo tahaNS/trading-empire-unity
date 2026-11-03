@@ -53,7 +53,7 @@ namespace TradingEmpire.Terminal
             const float x0 = 620;
 
             var toggle = Ui.Button(_positionRows, _insights ? "< Back to the trade" : "Insights >", () => { _insights = !_insights; _journalSig = null; _dirty = true; }, Theme.PanelAlt, 11);
-            Ui.Place((RectTransform)toggle.transform, new Vector2(0, 1), new Vector2(0, 1), new Vector2(1440, -26), new Vector2(1556, -2));
+            Ui.Place((RectTransform)toggle.transform, new Vector2(0, 1), new Vector2(0, 1), new Vector2(1110, -26), new Vector2(1226, -2));
             _rows.Add(toggle.gameObject);
 
             if (_insights) { InsightsView(entries); return; }
@@ -66,7 +66,7 @@ namespace TradingEmpire.Terminal
             input.characterLimit = JournalStore.MaxNote;
             input.textComponent.horizontalOverflow = HorizontalWrapMode.Wrap;
             input.textComponent.verticalOverflow = VerticalWrapMode.Truncate;
-            Ui.Place((RectTransform)input.transform, new Vector2(0, 1), new Vector2(0, 1), new Vector2(x0, -78), new Vector2(x0 + 560, -18));
+            Ui.Place((RectTransform)input.transform, new Vector2(0, 1), new Vector2(0, 1), new Vector2(x0, -78), new Vector2(x0 + 400, -18));
             string key2 = _journalKey;
             input.onEndEdit.AddListener(text => Session.Journal.Set(key2, text));
             var ph = Ui.Label(input.transform, "What was the plan? What did you see?", 11, Theme.Dim, TextAnchor.UpperLeft, true);
@@ -74,14 +74,14 @@ namespace TradingEmpire.Terminal
             input.placeholder = ph;
             _rows.Add(input.gameObject);
 
-            var rl = Ui.Label(_positionRows, "HOW WELL DID YOU TRADE IT?", 10, Theme.Dim, TextAnchor.MiddleLeft, false, true);
-            Ui.Place(rl.rectTransform, new Vector2(0, 1), new Vector2(0, 1), new Vector2(x0 + 580, -16), new Vector2(x0 + 800, -2));
+            var rl = Ui.Label(_positionRows, "YOUR RATING", 10, Theme.Dim, TextAnchor.MiddleLeft, false, true);
+            Ui.Place(rl.rectTransform, new Vector2(0, 1), new Vector2(0, 1), new Vector2(x0 + 420, -16), new Vector2(x0 + 620, -2));
             _rows.Add(rl.gameObject);
             for (int n = 1; n <= 5; n++)
             {
                 int rating = n;
                 var b = Ui.Button(_positionRows, n.ToString(), () => Session.Journal.Set(key2, null, null, entry.Rating == rating ? 0 : rating), n <= entry.Rating ? Theme.Accent : Theme.PanelAlt, 12, n <= entry.Rating ? Color.black : (Color?)null);
-                Ui.Place((RectTransform)b.transform, new Vector2(0, 1), new Vector2(0, 1), new Vector2(x0 + 580 + (n - 1) * 36, -48), new Vector2(x0 + 580 + (n - 1) * 36 + 32, -20));
+                Ui.Place((RectTransform)b.transform, new Vector2(0, 1), new Vector2(0, 1), new Vector2(x0 + 420 + (n - 1) * 36, -48), new Vector2(x0 + 420 + (n - 1) * 36 + 32, -20));
                 _rows.Add(b.gameObject);
             }
 
@@ -93,12 +93,12 @@ namespace TradingEmpire.Terminal
                 string tag = JournalStore.PresetTags[i];
                 bool on = entry.Tags.Any(x => string.Equals(x, tag, StringComparison.OrdinalIgnoreCase));
                 var b = Ui.Button(_positionRows, tag, () => Session.Journal.ToggleTag(key2, tag), on ? Theme.Blue : Theme.PanelAlt, 11);
-                int col = i % 7, row = i / 7;
-                Ui.Place((RectTransform)b.transform, new Vector2(0, 1), new Vector2(0, 1), new Vector2(x0 + col * 134, -122 - row * 28), new Vector2(x0 + col * 134 + 130, -98 - row * 28));
+                int col = i % 6, row = i / 6;
+                Ui.Place((RectTransform)b.transform, new Vector2(0, 1), new Vector2(0, 1), new Vector2(x0 + col * 102, -122 - row * 28), new Vector2(x0 + col * 102 + 98, -98 - row * 28));
                 _rows.Add(b.gameObject);
             }
-            var why = Ui.Label(_positionRows, "Closed by " + sel.Exit.Reason + ". The rating is about how well you traded it, not how it ended.", 10, Theme.Dim, TextAnchor.MiddleLeft);
-            Ui.Place(why.rectTransform, new Vector2(0, 1), new Vector2(0, 1), new Vector2(x0, -176), new Vector2(x0 + 900, -158));
+            var why = Ui.Label(_positionRows, "Closed by " + sel.Exit.Reason + ". Rate how well you traded it, not how it ended.", 10, Theme.Dim, TextAnchor.MiddleLeft);
+            Ui.Place(why.rectTransform, new Vector2(0, 1), new Vector2(0, 1), new Vector2(x0 + 50, -94), new Vector2(x0 + 600, -80));
             _rows.Add(why.gameObject);
         }
 
@@ -116,7 +116,7 @@ namespace TradingEmpire.Terminal
             var best = st.ByHour.Where(h => h.Trades >= 2).OrderByDescending(h => h.Net.Cents).FirstOrDefault();
             if (best != null) sb.Append("\nBest hour (UTC): ").Append(best.Label).Append(":00  ").Append(best.Net.ToSignedString());
             var lab = Ui.Label(_positionRows, sb.ToString(), 11, Theme.Text, TextAnchor.UpperLeft, true);
-            Ui.Place(lab.rectTransform, new Vector2(0, 1), new Vector2(0, 1), new Vector2(620, -180), new Vector2(1430, 0));
+            Ui.Place(lab.rectTransform, new Vector2(0, 1), new Vector2(0, 1), new Vector2(620, -180), new Vector2(1230, 0));
             _rows.Add(lab.gameObject);
         }
     }

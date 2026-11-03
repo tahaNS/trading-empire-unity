@@ -134,6 +134,7 @@ namespace TradingEmpire.Terminal
             CityView.Interactive = !open && !MenuHud.Open;
             MenuHud.RefreshNow();
             Audio.UpdateHum(World, open);
+            if (open && Tutorial != null) Tutorial.OfferInTerminal(); else if (Tutorial != null) Tutorial.HideOffer();
             if (open) Terminal.RefreshNow(); else CityHud.RefreshNow();
         }
 

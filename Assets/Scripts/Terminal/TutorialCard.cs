@@ -16,7 +16,7 @@ namespace TradingEmpire.Terminal
         GameApp _app;
         bool _persist;
         readonly Tutorial _tutorial = new Tutorial();
-        RectTransform _card, _welcome;
+        RectTransform _card, _welcome, _offer;
         Text _title, _body, _count;
         Button _skip;
         float _nextCheck;
@@ -78,7 +78,37 @@ namespace TradingEmpire.Terminal
             var go = Ui.Pill(win.transform, "Start playing", () => CloseWelcome(), false, 13);
             Ui.Place((RectTransform)go.transform, new Vector2(0, 0), new Vector2(0, 0), new Vector2(326, 22), new Vector2(476, 62));
             _welcome.gameObject.SetActive(false);
+
+            // the "New here?" offer shown the first time the terminal opens
+            var oc = Ui.Card(root, "Offer", 12f, Color.white);
+            _offer = oc.rectTransform;
+            Ui.Place(_offer, new Vector2(0, 0), new Vector2(0, 0), new Vector2(16, 16), new Vector2(386, 150));
+            var ot = Ui.Label(_offer, "New here?", 15, Theme.Ink, TextAnchor.MiddleLeft, false, true);
+            Ui.Place(ot.rectTransform, new Vector2(0, 1), new Vector2(1, 1), new Vector2(16, -38), new Vector2(-16, -10));
+            var ob = Ui.Label(_offer, "Take a short guided first trade: plan it, place it, see it through and review it.", 12, Theme.Muted, TextAnchor.UpperLeft);
+            ob.horizontalOverflow = HorizontalWrapMode.Wrap;
+            Ui.Place(ob.rectTransform, new Vector2(0, 0), new Vector2(1, 1), new Vector2(16, 46), new Vector2(-16, -40));
+            var yes = Ui.Pill(_offer, "Start the tutorial", () => { CloseOffer(); StartTutorial(); }, true, 12);
+            Ui.Place((RectTransform)yes.transform, new Vector2(0, 0), new Vector2(0, 0), new Vector2(16, 12), new Vector2(176, 42));
+            var no = Ui.Pill(_offer, "No thanks", () => CloseOffer(), false, 12);
+            Ui.Place((RectTransform)no.transform, new Vector2(0, 0), new Vector2(0, 0), new Vector2(184, 12), new Vector2(284, 42));
+            _offer.gameObject.SetActive(false);
         }
+
+        void CloseOffer()
+        {
+            _offer.gameObject.SetActive(false);
+            if (_persist) PlayerPrefs.SetInt("te.offerSeen", 1);
+        }
+
+        /// <summary>The first time the terminal opens (and no guide was started), offer the guided first trade.</summary>
+        public void OfferInTerminal()
+        {
+            if (!_persist || PlayerPrefs.GetInt("te.offerSeen", 0) == 1 || _tutorial.Status != TutorialStatus.New || _welcome.gameObject.activeSelf) return;
+            _offer.gameObject.SetActive(true);
+        }
+
+        public void HideOffer() { if (_offer != null) _offer.gameObject.SetActive(false); }
 
         void Restore()
         {

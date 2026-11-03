@@ -23,7 +23,7 @@ namespace TradingEmpire.PlayModeTests
         }
 
         // the tests click settings buttons; they must not leave the player's own settings changed
-        static readonly string[] PrefKeys = { "te.uiScale", "te.colorBlind", "te.muted", "te.welcomed", "te.tutorial", "te.tutorial.step" };
+        static readonly string[] PrefKeys = { "te.uiScale", "te.colorBlind", "te.muted", "te.welcomed", "te.tutorial", "te.tutorial.step", "te.offerSeen" };
         readonly System.Collections.Generic.Dictionary<string, string> _savedPrefs = new System.Collections.Generic.Dictionary<string, string>();
 
         [SetUp]

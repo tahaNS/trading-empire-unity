@@ -23,6 +23,7 @@ namespace TradingEmpire.Terminal
         public Func<bool> IsMuted;
         Button _soundButton;
         RectTransform _topLeft, _topRight;
+        Text _dateState;
         float _scaleWidth = -1;
 
         /// <summary>The cards and buttons on the top row are laid out for about 1760 pixels; on a narrower screen the whole row scales down so nothing ever overlaps (like the web page does).</summary>
@@ -131,7 +132,8 @@ namespace TradingEmpire.Terminal
 
             var date = Ui.Card(_topLeft, "DateCard");
             Ui.Place(date.rectTransform, new Vector2(0, 1), new Vector2(0, 1), new Vector2(458, -84), new Vector2(868, -12));
-            Caption(date.transform, "DATE", 14, 120, 8, 18, 11, Theme.Muted, true);
+            Caption(date.transform, "DATE", 14, 40, 8, 18, 11, Theme.Muted, true);
+            _dateState = Caption(date.transform, "", 52, 100, 8, 18, 10, Theme.Muted, true);
             _date = Caption(date.transform, "", 14, 130, 30, 30, 16, Theme.Ink, true);
             var seg = Ui.Box(date.transform, "Segments", Segment);
             Ui.Rounded(seg, 8f);
@@ -509,8 +511,19 @@ namespace TradingEmpire.Terminal
             }
         }
 
+        int _speedBeforePause = 1;
+
         void Update()
         {
+            // Space pauses and resumes the city clock (like the web version)
+            var es = UnityEngine.EventSystems.EventSystem.current;
+            var sel = es != null ? es.currentSelectedGameObject : null;
+            bool typing = sel != null && sel.GetComponent<InputField>() != null;
+            if (Input.GetKeyDown(KeyCode.Space) && !typing)
+            {
+                if (_world.Clock.Speed > 0) { _speedBeforePause = _world.Clock.Speed; _world.Clock.SetSpeed(0); }
+                else _world.Clock.SetSpeed(_speedBeforePause > 0 ? _speedBeforePause : 1);
+            }
             FitTopRow();
             FitAbove();
             AnimateFloaters();
@@ -526,6 +539,7 @@ namespace TradingEmpire.Terminal
             _date.text = DateTimeOffset.FromUnixTimeMilliseconds(_world.Clock.Time).UtcDateTime.ToString("MMM d, yyyy", CultureInfo.InvariantCulture);
             for (int i = 0; i < _speedButtons.Count; i++) { bool on = GameClock.Speeds[i] == _world.Clock.Speed; Style(_speedButtons[i], on ? Theme.Primary : Color.clear, on ? Color.white : Theme.Ink); }
 
+            if (_dateState != null) _dateState.text = "[Space] " + (_world.Clock.Speed == 0 ? "PAUSED" : "PAUSE");
             if (_soundButton != null) Ui.SetButtonLabel(_soundButton, IsMuted != null && IsMuted() ? "Muted" : "Sound");
             _treasury.text = s.Balance.ToString();
             _treasury.color = s.Balance.Cents < 0 ? Theme.Bad : Theme.Ink;

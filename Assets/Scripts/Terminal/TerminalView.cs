@@ -97,15 +97,16 @@ namespace TradingEmpire.Terminal
         {
             BuildTopBar(root);
 
-            const float rightW = 330f, bottomH = 230f, topH = 84f;
+            const float rightW = 330f, bottomH = 230f, topH = 84f, chartTopH = 38f;
             var chartHost = Ui.Rect(root, "ChartHost");
-            Ui.Place(chartHost, Vector2.zero, Vector2.one, new Vector2(8, bottomH + 8), new Vector2(-rightW - 16, -topH - 8));
+            Ui.Place(chartHost, Vector2.zero, Vector2.one, new Vector2(8, bottomH + 8), new Vector2(-rightW - 16, -topH - 8 - chartTopH));
             _chart = ChartView.Create(chartHost);
             Ui.Stretch((RectTransform)_chart.transform);
             _chart.Bind(Session);
             _chart.PlanFromPosition = PlanFrom;
             _chart.ToggleFull = ToggleFull;
             _chartHost = chartHost;
+            BuildChartTop(root, topH, rightW, chartTopH);
             Session.Drawings.Changed += MarkDirty;
 
             var right = Ui.Rect(root, "RightPanel");
@@ -186,8 +187,9 @@ namespace TradingEmpire.Terminal
             x += 8;
             AddTopButton(bar, "Restart", ref x, 74, () => Session.Restart());
 
-            _tfRow = Ui.Rect(bar, "Timeframes");
-            Ui.Place(_tfRow, new Vector2(1, 0), new Vector2(1, 0), new Vector2(-470, 6), new Vector2(-10, 32));
+            // the current replay time, at the right of row 2
+            _clockText = Ui.Label(bar, "", 12, Theme.Text, TextAnchor.MiddleRight, true);
+            Ui.Place(_clockText.rectTransform, new Vector2(1, 0), new Vector2(1, 0), new Vector2(-420, 6), new Vector2(-12, 32));
         }
 
         Button AddTopButton(RectTransform bar, string label, ref float x, float w, Action onClick)
@@ -202,7 +204,7 @@ namespace TradingEmpire.Terminal
         {
             // account card
             var acct = Ui.Rect(right, "Account");
-            Ui.Place(acct, new Vector2(0, 1), Vector2.one, new Vector2(0, -212), Vector2.zero);
+            Ui.Place(acct, new Vector2(0, 1), Vector2.one, new Vector2(0, -226), Vector2.zero);
             Ui.Panel(acct, "Bg", Theme.Panel).rectTransform.SetAsFirstSibling();
             Ui.Stretch((RectTransform)acct.Find("Bg"));
             var head = Ui.Label(acct, "ACCOUNT", 12, Theme.Accent, TextAnchor.MiddleLeft, false, true);
@@ -212,15 +214,18 @@ namespace TradingEmpire.Terminal
             var eqLabel = Ui.Label(acct, "EQUITY", 10, Theme.Dim, TextAnchor.MiddleLeft, false, true);
             Ui.Place(eqLabel.rectTransform, new Vector2(0, 1), new Vector2(1, 1), new Vector2(12, -80), new Vector2(-12, -64));
 
-            _balance = StatRow(acct, "Balance", 0);
-            _margin = StatRow(acct, "Used margin", 1);
-            _freeMargin = StatRow(acct, "Free margin", 2);
-            _unrealized = StatRow(acct, "Unrealized P/L", 3);
-            _realized = StatRow(acct, "Realized P/L", 4);
+            _balance = StatCard(acct, "BALANCE", 0, 0);
+            _freeMargin = StatCard(acct, "FREE MARGIN", 1, 0);
+            _margin = StatCard(acct, "USED MARGIN", 0, 1);
+            _unrealized = StatCard(acct, "UNREALIZED P/L", 1, 1);
+            _realized = StatCard(acct, "REALIZED P/L", 0, 2);
+            var eqNote = Ui.Label(acct, "Equity = balance + unrealized P/L (net of costs). Margin = notional / leverage.", 10, Theme.Dim, TextAnchor.UpperLeft);
+            eqNote.horizontalOverflow = HorizontalWrapMode.Wrap;
+            Ui.Place(eqNote.rectTransform, new Vector2(0.5f, 1), Vector2.one, new Vector2(6, -216), new Vector2(-12, -176));
 
             // order card
             var order = Ui.Rect(right, "Order");
-            Ui.Place(order, new Vector2(0, 1), Vector2.one, new Vector2(0, -512), new Vector2(0, -218));
+            Ui.Place(order, new Vector2(0, 1), Vector2.one, new Vector2(0, -526), new Vector2(0, -232));
             Ui.Panel(order, "Bg", Theme.Panel).rectTransform.SetAsFirstSibling();
             Ui.Stretch((RectTransform)order.Find("Bg"));
             var oh = Ui.Label(order, "ORDER", 12, Theme.Accent, TextAnchor.MiddleLeft, false, true);
@@ -268,6 +273,49 @@ namespace TradingEmpire.Terminal
         }
 
         RectTransform _chartHost, _right, _bottomPanel;
+        Transform _chartTop;
+        Text _clockText;
+        Button _autoBtn, _objectsBtn, _indicatorsBtn, _topLong, _topShort, _fullBtn;
+
+        /// <summary>The strip above the chart, as on the web: timeframes, auto scale, objects, indicators, and Long / Short / Full chart.</summary>
+        void BuildChartTop(RectTransform root, float topH, float rightW, float chartTopH)
+        {
+            var top = Ui.Rect(root, "ChartTop");
+            _chartTop = top;
+            Ui.Place(top, new Vector2(0, 1), Vector2.one, new Vector2(8, -topH - 8 - chartTopH), new Vector2(-rightW - 16, -topH - 8));
+            Ui.Panel(top, "Bg", Theme.Panel).rectTransform.SetAsFirstSibling();
+            Ui.Stretch((RectTransform)top.Find("Bg"));
+            _tfRow = Ui.Rect(top, "Timeframes");
+            Ui.Place(_tfRow, new Vector2(0, 0), new Vector2(0, 1), new Vector2(6, 0), new Vector2(520, 0));
+            _autoBtn = Ui.Button(top, "Auto scale on  A", () => _chart.SetAuto(!_chart.AutoScale), Theme.PanelAlt, 11);
+            Ui.Place((RectTransform)_autoBtn.transform, new Vector2(0, 0), new Vector2(0, 1), new Vector2(530, 4), new Vector2(648, -4));
+            _objectsBtn = Ui.Button(top, "Objects", () => _chart.ToggleObjectPanel(), Theme.PanelAlt, 11);
+            Ui.Place((RectTransform)_objectsBtn.transform, new Vector2(0, 0), new Vector2(0, 1), new Vector2(654, 4), new Vector2(752, -4));
+            _indicatorsBtn = Ui.Button(top, "Indicators", () => _chart.ToggleIndicatorPanel(), Theme.PanelAlt, 11);
+            Ui.Place((RectTransform)_indicatorsBtn.transform, new Vector2(0, 0), new Vector2(0, 1), new Vector2(758, 4), new Vector2(868, -4));
+            _fullBtn = Ui.Button(top, "Full chart  F", () => ToggleFull(), Theme.PanelAlt, 11);
+            Ui.Place((RectTransform)_fullBtn.transform, new Vector2(1, 0), new Vector2(1, 1), new Vector2(-112, 4), new Vector2(-6, -4));
+            _topShort = Ui.Button(top, "Short  S", () => Session.StartDraft(Direction.Sell), new Color(0.65f, 0.2f, 0.24f), 11);
+            Ui.Place((RectTransform)_topShort.transform, new Vector2(1, 0), new Vector2(1, 1), new Vector2(-196, 4), new Vector2(-118, -4));
+            _topLong = Ui.Button(top, "Long  L", () => Session.StartDraft(Direction.Buy), new Color(0.1f, 0.5f, 0.4f), 11);
+            Ui.Place((RectTransform)_topLong.transform, new Vector2(1, 0), new Vector2(1, 1), new Vector2(-278, 4), new Vector2(-202, -4));
+            _chart.StateChanged = RefreshChartTop;
+        }
+
+        void RefreshChartTop()
+        {
+            if (_autoBtn == null) return;
+            Ui.SetButtonLabel(_autoBtn, _chart.AutoScale ? "Auto scale on  A" : "Auto scale off  A");
+            Ui.SetButtonColor(_autoBtn, _chart.AutoScale ? Theme.PanelAlt : Theme.Blue);
+            Ui.SetButtonLabel(_objectsBtn, _chart.ObjectCount > 0 ? "Objects (" + _chart.ObjectCount + ")" : "Objects");
+            Ui.SetButtonColor(_objectsBtn, _chart.ObjectPanelOpen ? Theme.Blue : Theme.PanelAlt);
+            Ui.SetButtonLabel(_indicatorsBtn, _chart.IndicatorCount > 0 ? "Indicators (" + _chart.IndicatorCount + ")" : "Indicators");
+            Ui.SetButtonColor(_indicatorsBtn, _chart.IndicatorPanelOpen ? Theme.Blue : Theme.PanelAlt);
+            Ui.SetButtonColor(_fullBtn, _full ? Theme.Blue : Theme.PanelAlt);
+            Ui.SetButtonLabel(_fullBtn, _full ? "Exit full chart  F" : "Full chart  F");
+            bool can = Session.State.Status == SessionStatus.Ready && Session.Draft == null;
+            _topLong.interactable = can; _topShort.interactable = can;
+        }
         bool _full;
 
         /// <summary>Full chart: hide the account, order and positions panels so the chart fills the screen.</summary>
@@ -277,7 +325,9 @@ namespace TradingEmpire.Terminal
             _right.gameObject.SetActive(!_full);
             _bottomPanel.gameObject.SetActive(!_full);
             _chartHost.offsetMin = _full ? new Vector2(8, 8) : new Vector2(8, 230 + 8);
-            _chartHost.offsetMax = _full ? new Vector2(-8, -84 - 8) : new Vector2(-330 - 16, -84 - 8);
+            _chartHost.offsetMax = _full ? new Vector2(-8, -84 - 8 - 38) : new Vector2(-330 - 16, -84 - 8 - 38);
+            var ct = (RectTransform)_chartTop;
+            ct.offsetMax = new Vector2(_full ? -8 : -330 - 16, ct.offsetMax.y);
             _dirty = true;
         }
 
@@ -393,7 +443,7 @@ namespace TradingEmpire.Terminal
         void BuildTransferCard(RectTransform right)
         {
             var card = Ui.Rect(right, "TransferCard");
-            Ui.Place(card, Vector2.zero, Vector2.one, Vector2.zero, new Vector2(0, -518));
+            Ui.Place(card, Vector2.zero, Vector2.one, Vector2.zero, new Vector2(0, -532));
             Ui.Panel(card, "Bg", Theme.Panel).rectTransform.SetAsFirstSibling();
             Ui.Stretch((RectTransform)card.Find("Bg"));
             var h = Ui.Label(card, "TRANSFER FUNDS", 12, Theme.Accent, TextAnchor.MiddleLeft, false, true);
@@ -439,6 +489,21 @@ namespace TradingEmpire.Terminal
             _transferText.text = "Trading balance  " + a.Balance + "\nCity treasury    " + World.City.TreasuryBalance + "\nYou can move     " + (_transferToCity ? World.Transfers.EligibleAmount() : World.Transfers.EligibleToTrading())
                 ;
             if (string.IsNullOrEmpty(_transferNote.text)) { _transferNote.text = "Only realized funds can leave the trading account."; _transferNote.color = Theme.Dim; }
+        }
+
+        /// <summary>A small rounded card with a caption and a value, two to a row, as in the web account panel.</summary>
+        Text StatCard(RectTransform parent, string caption, int col, int row)
+        {
+            float w = 0.5f;
+            var card = Ui.Box(parent, "Stat " + caption, Theme.PanelAlt);
+            Ui.Rounded(card, 6f);
+            float top = -94 - row * 44;
+            Ui.Place(card.rectTransform, new Vector2(col * w, 1), new Vector2((col + 1) * w, 1), new Vector2(col == 0 ? 8 : 3, top - 40), new Vector2(col == 0 ? -3 : -8, top));
+            var cap = Ui.Label(card.transform, caption, 9, Theme.Dim, TextAnchor.MiddleLeft, false, true);
+            Ui.Place(cap.rectTransform, new Vector2(0, 1), new Vector2(1, 1), new Vector2(8, -16), new Vector2(-4, -3));
+            var v = Ui.Label(card.transform, "", 13, Theme.Text, TextAnchor.MiddleLeft, true, true);
+            Ui.Place(v.rectTransform, new Vector2(0, 0), new Vector2(1, 1), new Vector2(8, 2), new Vector2(-4, -16));
+            return v;
         }
 
         Text StatRow(RectTransform parent, string label, int index)
@@ -620,6 +685,7 @@ namespace TradingEmpire.Terminal
             _symbol.text = inst.Display;
             _datasetName.text = s.Dataset != null ? s.Dataset.Name : "No dataset";
             _badge.transform.parent.gameObject.SetActive(s.Dataset != null && s.Dataset.Synthetic);
+            if (_clockText != null) _clockText.text = s.Now.HasValue ? DateTimeOffset.FromUnixTimeMilliseconds(s.Now.Value).UtcDateTime.ToString("MMM d, yyyy, h:mm tt", CultureInfo.InvariantCulture) + " UTC" : "";
             _progress.text = s.Total > 0 ? "candle " + s.RevealedCount.ToString("N0", CultureInfo.InvariantCulture) + " / " + s.Total.ToString("N0", CultureInfo.InvariantCulture) : "";
             Ui.SetButtonLabel(_play, s.Playing ? "Pause" : "Play");
             for (int i = 0; i < _speedButtons.Count; i++) Ui.SetButtonColor(_speedButtons[i], Speeds[i] == s.Speed ? Theme.Blue : Theme.PanelAlt);
@@ -635,6 +701,7 @@ namespace TradingEmpire.Terminal
 
             _chart.Refresh(Session.ChartData());
             RefreshChallenge();
+            RefreshChartTop();
             RefreshOrder();
             RefreshTransfer();
             RefreshTabs(s, inst);
@@ -668,7 +735,7 @@ namespace TradingEmpire.Terminal
                 {
                     long ms = tfs[i].Ms;
                     var b = Ui.Button(_tfRow, tfs[i].Label, () => Session.SetTimeframe(ms), Theme.PanelAlt, 11);
-                    Ui.Place((RectTransform)b.transform, new Vector2(1, 0), new Vector2(1, 1), new Vector2(-(tfs.Count - i) * (w + 2), 0), new Vector2(-(tfs.Count - i - 1) * (w + 2) - 2, 0));
+                    Ui.Place((RectTransform)b.transform, new Vector2(0, 0), new Vector2(0, 1), new Vector2(i * (w + 2), 3), new Vector2(i * (w + 2) + w, -3));
                     b.name = "TF " + ms;
                     _tfButtons.Add(b);
                 }
@@ -694,6 +761,7 @@ namespace TradingEmpire.Terminal
             else _journalSig = null;
             foreach (var r in _rows) Ui.Kill(r);
             _rows.Clear();
+            _tabBody.alignment = TextAnchor.UpperLeft;
             _tabBody.text = "";
             int d = inst.Digits;
             if (_tab == 0) PositionRows(s, d);
@@ -705,7 +773,7 @@ namespace TradingEmpire.Terminal
 
         void PositionRows(SessionState s, int digits)
         {
-            if (s.Positions.Count == 0) { _tabBody.text = "<color=#8594ad>No open positions. Plan a trade with LONG or SHORT.</color>"; return; }
+            if (s.Positions.Count == 0) { _tabBody.alignment = TextAnchor.MiddleCenter; _tabBody.text = "<color=#8594ad>No open positions.\nPlan a trade with Long or Short.</color>"; return; }
             _tabBody.text = Pad("SIDE", 6) + Pad("SIZE", 7) + Pad("ENTRY", 12) + Pad("SL", 12) + Pad("TP", 12) + "P/L";
             int row = 0;
             foreach (var pv in s.Positions.Take(7))

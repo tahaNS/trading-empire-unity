@@ -15,34 +15,45 @@ namespace TradingEmpire.Terminal
     /// </summary>
     public sealed class ChartView : MonoBehaviour, IPointerEnterHandler, IPointerExitHandler
     {
-        sealed class ToolDef { public string Id, Label, Hint; public ToolDef(string id, string label, string hint) { Id = id; Label = label; Hint = hint; } }
+        sealed class ToolDef
+        {
+            public string Id, Label, Hint, Group, Key;
+            public ToolDef(string id, string label, string hint, string group = null, string key = null) { Id = id; Label = label; Hint = hint; Group = group; Key = key; }
+        }
+
+        static readonly string[] GroupIds = { "lines", "channels", "fib", "shapes", "notes", "trade" };
+        static readonly string[] GroupNames = { "Lines", "Channels and fans", "Fibonacci", "Shapes", "Notes and marks", "Trade planning" };
 
         static readonly ToolDef[] Tools =
         {
-            new ToolDef(null, "Sel", "Select: click a drawing to select, drag it or its handles. Del deletes."),
-            new ToolDef("measure", "Ms", "Measure: click two points to see the pips, bars, time and percent between them (M)."),
-            new ToolDef("hline", "H", "Horizontal line: click a price."),
-            new ToolDef("vline", "V", "Vertical line: click a time."),
-            new ToolDef("hray", "Ray", "Horizontal ray: click where it starts."),
-            new ToolDef("trend", "Tr", "Trend line: click two points (or drag)."),
-            new ToolDef("channel", "Ch", "Parallel channel: click two points, then the width."),
-            new ToolDef("rect", "Rc", "Rectangle: click two corners (or drag)."),
-            new ToolDef("ellipse", "El", "Ellipse: click two corners (or drag)."),
-            new ToolDef("fib", "Fib", "Fibonacci retracement: click the swing start and end."),
-            new ToolDef("fibext", "FX", "Fibonacci extension: click the move (2 points), then where it restarts."),
-            new ToolDef("regression", "Rg", "Regression channel: click the first and last bar of the stretch."),
-            new ToolDef("pitchfork", "Pf", "Andrews' pitchfork: click three points (the pivot, then a high and a low)."),
-            new ToolDef("gannfan", "Gn", "Gann fan: click the origin, then a second point."),
-            new ToolDef("fibchannel", "FC", "Fibonacci channel: click two points, then the width."),
-            new ToolDef("fibtime", "FT", "Fibonacci time zones: click two points one unit apart."),
-            new ToolDef("fibfan", "FF", "Fibonacci speed fan: click the start and end of a move."),
-            new ToolDef("fibarcs", "FA", "Fibonacci arcs: click the start and end of a move."),
-            new ToolDef("text", "Txt", "Text note: click where it goes, then type its text above."),
-            new ToolDef("pricelabel", "$", "Price label: click a price."),
-            new ToolDef("up", "Up", "Arrow up marker: click."),
-            new ToolDef("down", "Dn", "Arrow down marker: click."),
-            new ToolDef("long", "Lg", "Long position box (entry, 20 pip stop, 40 pip target): click the entry."),
-            new ToolDef("short", "Sh", "Short position box (entry, 20 pip stop, 40 pip target): click the entry."),
+            new ToolDef(null, "Cursor", "Select: click a drawing to select, drag it or its handles. Del deletes.", null, "V"),
+            new ToolDef("measure", "Measure", "Measure: click two points to see the pips, bars, time and percent between them.", null, "M"),
+            new ToolDef("trend", "Trend line", "Trend line: click two points (or drag).", "lines", "T"),
+            new ToolDef("ray", "Ray", "Ray: a line that runs on to the right. Click two points.", "lines"),
+            new ToolDef("extline", "Extended line", "Extended line: runs on both ways. Click two points.", "lines"),
+            new ToolDef("arrow", "Arrow", "Arrow: a line with an arrow head. Click two points.", "lines"),
+            new ToolDef("hline", "Horizontal line", "Horizontal line: click a price.", "lines", "H"),
+            new ToolDef("hray", "Horizontal ray", "Horizontal ray: click where it starts.", "lines"),
+            new ToolDef("vline", "Vertical line", "Vertical line: click a time.", "lines"),
+            new ToolDef("channel", "Parallel channel", "Parallel channel: click two points, then the width.", "channels"),
+            new ToolDef("regression", "Regression channel", "Regression channel: click the first and last bar of the stretch.", "channels"),
+            new ToolDef("pitchfork", "Andrews' pitchfork", "Andrews' pitchfork: click three points (the pivot, then a high and a low).", "channels"),
+            new ToolDef("gannfan", "Gann fan", "Gann fan: click the origin, then a second point.", "channels"),
+            new ToolDef("fib", "Fib retracement", "Fibonacci retracement: click the swing start and end.", "fib", "G"),
+            new ToolDef("fibext", "Fib extension", "Fibonacci extension: click the move (2 points), then where it restarts.", "fib"),
+            new ToolDef("fibchannel", "Fib channel", "Fibonacci channel: click two points, then the width.", "fib"),
+            new ToolDef("fibtime", "Fib time zones", "Fibonacci time zones: click two points one unit apart.", "fib"),
+            new ToolDef("fibfan", "Fib speed fan", "Fibonacci speed fan: click the start and end of a move.", "fib"),
+            new ToolDef("fibarcs", "Fib arcs", "Fibonacci arcs: click the start and end of a move.", "fib"),
+            new ToolDef("rect", "Rectangle", "Rectangle: click two corners (or drag).", "shapes", "R"),
+            new ToolDef("ellipse", "Ellipse", "Ellipse: click two corners (or drag).", "shapes"),
+            new ToolDef("triangle", "Triangle", "Triangle: click three corners.", "shapes"),
+            new ToolDef("text", "Text note", "Text note: click where it goes, then type its text above.", "notes", "X"),
+            new ToolDef("pricelabel", "Price label", "Price label: click a price.", "notes"),
+            new ToolDef("up", "Arrow up", "Arrow up marker: click.", "notes"),
+            new ToolDef("down", "Arrow down", "Arrow down marker: click.", "notes"),
+            new ToolDef("long", "Long position", "Long position box (entry, 20 pip stop, 40 pip target): click the entry.", "trade"),
+            new ToolDef("short", "Short position", "Short position box (entry, 20 pip stop, 40 pip target): click the entry.", "trade"),
         };
 
         CandleGraphic _graphic;
@@ -54,7 +65,8 @@ namespace TradingEmpire.Terminal
         readonly List<Text> _indLabels = new List<Text>();
         IndicatorPanel _indicatorPanel;
         ObjectPanel _objectPanel;
-        Button _indicatorButton, _objectButton, _autoButton;
+        /// <summary>Raised when the auto-scale state or the number of indicators changes, so the terminal can relabel its buttons.</summary>
+        public Action StateChanged;
         /// <summary>Set by the terminal: switches between the chart with its panels and the chart alone.</summary>
         public Action ToggleFull;
         (Anchor a, Anchor b)? _measure;
@@ -63,10 +75,15 @@ namespace TradingEmpire.Terminal
         public void SetAuto(bool on)
         {
             _graphic.ManualRange = !on;
-            Ui.SetButtonLabel(_autoButton, on ? "Auto scale on" : "Auto scale off");
-            Ui.SetButtonColor(_autoButton, on ? Theme.PanelAlt : Theme.Blue);
+            if (StateChanged != null) StateChanged();
             _graphic.SetVerticesDirty();
         }
+        public void ToggleIndicatorPanel() { _objectPanel.Show(false); _indicatorPanel.Toggle(); if (StateChanged != null) StateChanged(); }
+        public void ToggleObjectPanel() { _indicatorPanel.Show(false); _objectPanel.Toggle(); if (StateChanged != null) StateChanged(); }
+        public bool IndicatorPanelOpen { get { return _indicatorPanel.Visible; } }
+        public bool ObjectPanelOpen { get { return _objectPanel.Visible; } }
+        public int IndicatorCount { get { return _session != null ? _session.Indicators.Items.Count : 0; } }
+        public int ObjectCount { get { return _session != null ? _session.Drawings.Items.Count : 0; } }
         public bool AutoScale { get { return !_graphic.ManualRange; } }
         Text _empty, _hint;
         bool _hover;
@@ -83,7 +100,19 @@ namespace TradingEmpire.Terminal
         Anchor _lastAnchor;
         int _colorIndex;
         ChartData _data;
-        readonly List<Button> _toolButtons = new List<Button>();
+        readonly List<(RectTransform rt, float h, float gapAfter, float xInset)> _railRows = new List<(RectTransform, float, float, float)>();
+        readonly Dictionary<string, Button> _toolBtn = new Dictionary<string, Button>();
+        readonly Dictionary<string, Button> _groupBtn = new Dictionary<string, Button>();
+        readonly Dictionary<string, IconGraphic> _groupIcon = new Dictionary<string, IconGraphic>();
+        readonly Dictionary<string, string> _lastInGroup = new Dictionary<string, string>
+        {
+            { "lines", "trend" }, { "channels", "channel" }, { "fib", "fib" }, { "shapes", "rect" }, { "notes", "text" }, { "trade", "long" },
+        };
+        Button _cursorBtn, _measureBtn;
+        readonly List<Button> _swatches = new List<Button>();
+        RectTransform _flyout;
+        string _flyoutGroup;
+        string _drawColor = DrawingKinds.Colors[0];
         RectTransform _props;
         Button _lockButton, _hideButton, _planButton;
         InputField _textField;
@@ -111,14 +140,6 @@ namespace TradingEmpire.Terminal
             view.BuildProps();
             view._indicatorPanel = IndicatorPanel.Create(rt);
             view._objectPanel = ObjectPanel.Create(rt, view);
-            view._objectButton = Ui.Button(rt, "Objects", () => { view._indicatorPanel.Show(false); view._objectPanel.Toggle(); }, Theme.PanelAlt, 11);
-            Ui.Place((RectTransform)view._objectButton.transform, new Vector2(1, 1), new Vector2(1, 1), new Vector2(-132, -26), new Vector2(-84, -4));
-            view._autoButton = Ui.Button(rt, "Auto scale on", () => view.SetAuto(!view.AutoScale), Theme.PanelAlt, 11);
-            Ui.Place((RectTransform)view._autoButton.transform, new Vector2(1, 1), new Vector2(1, 1), new Vector2(-366, -26), new Vector2(-256, -4));
-            var full = Ui.Button(rt, "Full chart", () => { if (view.ToggleFull != null) view.ToggleFull(); }, Theme.PanelAlt, 11);
-            Ui.Place((RectTransform)full.transform, new Vector2(1, 1), new Vector2(1, 1), new Vector2(-462, -26), new Vector2(-372, -4));
-            view._indicatorButton = Ui.Button(rt, "Indicators", () => { view._objectPanel.Show(false); view._indicatorPanel.Toggle(); }, Theme.PanelAlt, 11);
-            Ui.Place((RectTransform)view._indicatorButton.transform, new Vector2(1, 1), new Vector2(1, 1), new Vector2(-250, -26), new Vector2(-138, -4));
             return view;
         }
 
@@ -144,12 +165,7 @@ namespace TradingEmpire.Terminal
 
         void OnDestroy() { if (_session != null) { _session.Drawings.Changed -= OnDrawingsChanged; _session.Indicators.Changed -= OnIndicatorsChanged; } }
         void OnIndicatorsChanged() { if (_data != null) Refresh(_data); RefreshIndicatorButton(); }
-        void RefreshIndicatorButton()
-        {
-            int n = _session != null ? _session.Indicators.Items.Count : 0;
-            Ui.SetButtonLabel(_indicatorButton, n > 0 ? "Indicators (" + n + ")" : "Indicators");
-            Ui.SetButtonColor(_indicatorButton, n > 0 ? Theme.Blue : Theme.PanelAlt);
-        }
+        void RefreshIndicatorButton() { if (StateChanged != null) StateChanged(); }
         void OnDrawingsChanged() { _propsDirty = true; }
 
         // ---------------------------------------------------------------- tool strip and properties bar
@@ -157,44 +173,150 @@ namespace TradingEmpire.Terminal
         RectTransform _strip;
         float _stripHeight = -1;
 
-        /// <summary>The tool buttons shrink to fit when the chart is short, so none of them is cut off.</summary>
+        /// <summary>Stack the rail's rows top to bottom; they shrink together when the chart is short, so none is cut off.</summary>
         void LayoutTools()
         {
             if (_strip == null) return;
             float height = _strip.rect.height;
             if (Mathf.Approximately(height, _stripHeight) || height < 60) return;
             _stripHeight = height;
-            int n = _toolButtons.Count;
-            float gap = 2f, clearRoom = 30f;
-            float h = Mathf.Clamp((height - clearRoom - gap) / n - gap, 11f, 19f);
-            float y = gap;
-            foreach (var b in _toolButtons)
+            float need = 8f;
+            foreach (var r in _railRows) need += r.h + r.gapAfter;
+            float f = Mathf.Clamp(height / need, 0.5f, 1f);
+            float y = 4f;
+            foreach (var r in _railRows)
             {
-                Ui.Place((RectTransform)b.transform, new Vector2(0, 1), new Vector2(1, 1), new Vector2(2, -y - h), new Vector2(-2, -y));
-                y += h + gap;
+                float h = r.h * f;
+                r.rt.anchorMin = new Vector2(0, 1); r.rt.anchorMax = new Vector2(1, 1);
+                r.rt.offsetMin = new Vector2(2 + r.xInset, -y - h); r.rt.offsetMax = new Vector2(-2 - r.xInset, -y);
+                y += h + r.gapAfter * f;
             }
+        }
+
+        RectTransform Row(float h, float gapAfter, float xInset = 0f)
+        {
+            var rt = Ui.Rect(_strip, "Row");
+            _railRows.Add((rt, h, gapAfter, xInset));
+            return rt;
+        }
+
+        Button RailButton(RectTransform host, string icon, Action act, Color? fill = null)
+        {
+            var b = Ui.Button(host, "", act, fill ?? Theme.PanelAlt, 10);
+            Ui.Stretch((RectTransform)b.transform);
+            Ui.Rounded((Image)b.targetGraphic, 5f);
+            IconGraphic.Add(b.transform, icon, Theme.Text);
+            return b;
         }
 
         void BuildToolStrip()
         {
             var strip = Ui.Rect(_root, "Tools");
-            Ui.Place(strip, new Vector2(0, 0), new Vector2(0, 1), new Vector2(2, 28), new Vector2(40, -4));
-            Ui.Panel(strip, "Bg", new Color(0.05f, 0.07f, 0.1f, 0.9f)).rectTransform.SetAsFirstSibling();
-            Ui.Stretch((RectTransform)strip.Find("Bg"));
+            Ui.Place(strip, new Vector2(0, 0), new Vector2(0, 1), new Vector2(2, 4), new Vector2(42, -4));
+            var bg = Ui.Panel(strip, "Bg", new Color(0.05f, 0.07f, 0.1f, 0.92f));
+            Ui.Rounded(bg, 6f);
+            bg.rectTransform.SetAsFirstSibling();
+            Ui.Stretch(bg.rectTransform);
             _strip = strip;
-            float y = 2, h = 19;
-            foreach (var t in Tools)
+
+            _cursorBtn = RailButton(Row(26, 2), "cursor", () => SetTool(null));
+            _measureBtn = RailButton(Row(26, 2), "ruler", () => SetTool("measure"));
+            Row(2, 4);
+            for (int g = 0; g < GroupIds.Length; g++)
             {
-                var tool = t;
-                var b = Ui.Button(strip, t.Label, () => SetTool(tool.Id), Theme.PanelAlt, 10);
-                Ui.Place((RectTransform)b.transform, new Vector2(0, 1), new Vector2(1, 1), new Vector2(2, -y - h), new Vector2(-2, -y));
-                _toolButtons.Add(b);
-                y += h + 2;
+                string group = GroupIds[g];
+                var host = Row(26, 2);
+                var main = Ui.Rect(host, "Main");
+                Ui.Place(main, Vector2.zero, Vector2.one, Vector2.zero, new Vector2(-9, 0));
+                var btn = RailButton(main, _lastInGroup[group], () => SetTool(_lastInGroup[group]));
+                _groupBtn[group] = btn;
+                _groupIcon[group] = btn.GetComponentInChildren<IconGraphic>();
+                var more = Ui.Rect(host, "More");
+                Ui.Place(more, new Vector2(1, 0), Vector2.one, new Vector2(-9, 0), Vector2.zero);
+                var mb = Ui.Button(more, ">", () => ToggleFlyout(group, host), Color.clear, 9, Theme.Dim);
+                Ui.Stretch((RectTransform)mb.transform);
             }
-            var del = Ui.Button(strip, "Clr", () => { if (_session != null) _session.Drawings.Clear(); _selectedId = null; }, new Color(0.45f, 0.18f, 0.2f), 10);
-            Ui.Place((RectTransform)del.transform, new Vector2(0, 0), new Vector2(1, 0), new Vector2(2, 2), new Vector2(-2, 26));
+            Row(2, 4);
+            foreach (var hex in DrawingKinds.Colors)
+            {
+                string h = hex;
+                Color c; ColorUtility.TryParseHtmlString(h, out c);
+                var sw = Ui.Button(Row(14, 3, 6), "", () => { _drawColor = h; EditSelected(d => d.Data.Set("color", h)); _propsDirty = true; }, c, 8);
+                Ui.Stretch((RectTransform)sw.transform);
+                Ui.Rounded((Image)sw.targetGraphic, 3f);
+                _swatches.Add(sw);
+            }
+            Row(2, 4);
+            RailButton(Row(26, 2), "trash", () => DeleteSelected());
+            RailButton(Row(26, 2), "close", () => { if (_session != null) _session.Drawings.Clear(); _selectedId = null; _propsDirty = true; });
+
             _hint = Ui.Label(_root, "", 11, Theme.Dim, TextAnchor.MiddleLeft);
-            Ui.Place(_hint.rectTransform, new Vector2(0, 1), new Vector2(1, 1), new Vector2(48, -24), new Vector2(-470, -4));
+            Ui.Place(_hint.rectTransform, new Vector2(0, 1), new Vector2(1, 1), new Vector2(52, -24), new Vector2(-90, -4));
+
+            // the flyout menu that lists every tool of a group
+            var fly = Ui.Panel(_root, "Flyout", new Color(0.09f, 0.12f, 0.17f, 0.99f));
+            Ui.Rounded(fly, 8f);
+            var sh = fly.gameObject.AddComponent<Shadow>(); sh.effectColor = new Color(0, 0, 0, 0.4f); sh.effectDistance = new Vector2(0, -2);
+            _flyout = fly.rectTransform;
+            _flyout.gameObject.SetActive(false);
+        }
+
+        void ToggleFlyout(string group, RectTransform host)
+        {
+            if (_flyout.gameObject.activeSelf && _flyoutGroup == group) { _flyout.gameObject.SetActive(false); return; }
+            _flyoutGroup = group;
+            for (int i = _flyout.childCount - 1; i >= 0; i--) Ui.Kill(_flyout.GetChild(i).gameObject);
+            var items = Tools.Where(t => t.Group == group).ToList();
+            float rowH = 26f, w = 200f, h = 28 + items.Count * rowH + 6;
+            var title = Ui.Label(_flyout, GroupNames[Array.IndexOf(GroupIds, group)].ToUpperInvariant(), 10, Theme.Dim, TextAnchor.MiddleLeft, false, true);
+            Ui.Place(title.rectTransform, new Vector2(0, 1), new Vector2(1, 1), new Vector2(10, -24), new Vector2(-8, -4));
+            for (int i = 0; i < items.Count; i++)
+            {
+                var t = items[i];
+                var b = Ui.Button(_flyout, "", () => { SetTool(t.Id); _flyout.gameObject.SetActive(false); }, t.Id == _tool ? Theme.Blue : Color.clear, 11);
+                Ui.Place((RectTransform)b.transform, new Vector2(0, 1), new Vector2(1, 1), new Vector2(4, -28 - (i + 1) * rowH), new Vector2(-4, -28 - i * rowH));
+                var lbl = b.transform.Find("Label").GetComponent<Text>();
+                lbl.alignment = TextAnchor.MiddleLeft; lbl.text = t.Label + (t.Key != null ? "   <color=#8594ad>" + t.Key + "</color>" : ""); lbl.fontStyle = FontStyle.Normal;
+                ((RectTransform)lbl.transform).offsetMin = new Vector2(30, 0);
+                var ic = IconGraphic.Add(b.transform, t.Id, Theme.Text);
+                var irt = ic.rectTransform; irt.anchorMin = new Vector2(0, 0); irt.anchorMax = new Vector2(0, 1); irt.offsetMin = new Vector2(4, 2); irt.offsetMax = new Vector2(26, -2);
+            }
+            // beside the group's row
+            var rail = _strip.rect;
+            Vector3[] corners = new Vector3[4]; host.GetWorldCorners(corners);
+            var local = (Vector2)_root.InverseTransformPoint(corners[1]);
+            var rootRect = _root.rect;
+            float x = 46f;
+            float top = Mathf.Clamp(local.y - rootRect.yMax + 0f, -rootRect.height + h, 0f);
+            _flyout.anchorMin = _flyout.anchorMax = new Vector2(0, 1);
+            _flyout.pivot = new Vector2(0, 1);
+            _flyout.sizeDelta = new Vector2(w, h);
+            _flyout.anchoredPosition = new Vector2(x, Mathf.Min(0f, local.y - rootRect.yMax));
+            _flyout.SetAsLastSibling();
+            _flyout.gameObject.SetActive(true);
+        }
+
+        void RefreshRail()
+        {
+            var tool = Tools.FirstOrDefault(t => t.Id == _tool);
+            Ui.SetButtonColor(_cursorBtn, _tool == null ? Theme.Blue : Theme.PanelAlt);
+            Ui.SetButtonColor(_measureBtn, _tool == "measure" ? Theme.Blue : Theme.PanelAlt);
+            string activeGroup = tool != null ? tool.Group : null;
+            foreach (var g in GroupIds)
+            {
+                Ui.SetButtonColor(_groupBtn[g], g == activeGroup ? Theme.Blue : Theme.PanelAlt);
+                _groupIcon[g].Icon = _lastInGroup[g];
+                _groupIcon[g].SetVerticesDirty();
+            }
+            var sel = SelectedDrawing();
+            string current = sel != null ? sel.Color : _drawColor;
+            for (int i = 0; i < _swatches.Count; i++)
+            {
+                var ol = _swatches[i].GetComponent<Outline>() ?? _swatches[i].gameObject.AddComponent<Outline>();
+                bool on = string.Equals(DrawingKinds.Colors[i], current, StringComparison.OrdinalIgnoreCase);
+                ol.effectColor = on ? Color.white : Color.clear; ol.effectDistance = new Vector2(1.5f, 1.5f);
+            }
+            _hint.text = tool != null ? tool.Hint : "";
         }
 
         void BuildProps()
@@ -250,6 +372,9 @@ namespace TradingEmpire.Terminal
         public void SetTool(string id)
         {
             _tool = id;
+            var spec = Tools.FirstOrDefault(t => t.Id == id);
+            if (spec != null && spec.Group != null) _lastInGroup[spec.Group] = id;
+            if (_flyout != null) _flyout.gameObject.SetActive(false);
             _pending.Clear();
             _dragCreating = false;
             if (id != null) _selectedId = null;
@@ -277,9 +402,7 @@ namespace TradingEmpire.Terminal
         void RefreshProps()
         {
             _propsDirty = false;
-            for (int i = 0; i < _toolButtons.Count; i++) Ui.SetButtonColor(_toolButtons[i], Tools[i].Id == _tool ? Theme.Blue : Theme.PanelAlt);
-            var tool = Tools.FirstOrDefault(t => t.Id == _tool);
-            _hint.text = tool != null ? tool.Hint : "";
+            RefreshRail();
             var d = SelectedDrawing();
             _props.gameObject.SetActive(d != null);
             _textField.gameObject.SetActive(d != null && d.Kind == "text");
@@ -374,6 +497,7 @@ namespace TradingEmpire.Terminal
         /// <summary>Handle a press at a chart-local point (also used by tests).</summary>
         public void PointerDown(Vector2 local)
         {
+            if (_flyout != null) _flyout.gameObject.SetActive(false);
             var a = AnchorAt(local);
             if (_tool != null)
             {
@@ -439,11 +563,12 @@ namespace TradingEmpire.Terminal
             {
                 case "up": case "down": case "long": case "short": return 0;
                 case "measure": return 2;
+                case "ray": case "extline": case "arrow": return 2;
                 default: return DrawingKinds.AnchorCount.TryGetValue(tool, out var n) ? n : 0;
             }
         }
 
-        string NextColor() { return DrawingKinds.Colors[_colorIndex % DrawingKinds.Colors.Length]; }
+        string NextColor() { return _drawColor; }
 
         /// <summary>Create the drawing for the tool from its anchors, select it, and go back to the cursor.</summary>
         public Drawing Build(string tool, List<Anchor> anchors, string color)
@@ -461,6 +586,9 @@ namespace TradingEmpire.Terminal
                 case "long": return DrawingKinds.Position(true, a, a.Time + 30 * barMs, a.Price + 40 * pip, a.Price - 20 * pip, color);
                 case "short": return DrawingKinds.Position(false, a, a.Time + 30 * barMs, a.Price - 40 * pip, a.Price + 20 * pip, color);
                 case "trend": return DrawingKinds.Trend(a, anchors[1], color);
+                case "ray": { var d = DrawingKinds.Trend(a, anchors[1], color); d.Data.Set("extend", "right"); return d; }
+                case "extline": { var d = DrawingKinds.Trend(a, anchors[1], color); d.Data.Set("extend", "both"); return d; }
+                case "arrow": { var d = DrawingKinds.Trend(a, anchors[1], color); d.Data.Set("arrow", true); return d; }
                 default:
                 {
                     var keys = tool == "hray" || tool == "pricelabel" ? new[] { "a" } : new[] { "a", "b", "c" };
