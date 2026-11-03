@@ -39,6 +39,8 @@ namespace TradingEmpire.Terminal
         public int IndOffset;
         /// <summary>Keep the current price range (set while dragging a plan line).</summary>
         public bool Freeze;
+        /// <summary>Auto scale off: the price range stays where the player put it (Ctrl + wheel changes it).</summary>
+        public bool ManualRange;
         public const float PaneH = 86f, PaneGap = 4f;
         /// <summary>Bottom of the plot area including the strips: where the time labels go.</summary>
         public float AxisY;
@@ -111,7 +113,7 @@ namespace TradingEmpire.Terminal
             Step = Plot.width / visible;
 
             // while a plan line is being dragged the price range stays put, so the line does not run away from the pointer
-            if (Freeze && Hi > Lo) return;
+            if ((Freeze || ManualRange) && Hi > Lo) return;
             long lo = long.MaxValue, hi = long.MinValue;
             for (int i = FirstIndex; i < total; i++) { lo = Math.Min(lo, Bars[i].Low); hi = Math.Max(hi, Bars[i].High); }
             foreach (var l in Lines) { if (l.Price > 0) { lo = Math.Min(lo, l.Price); hi = Math.Max(hi, l.Price); } }

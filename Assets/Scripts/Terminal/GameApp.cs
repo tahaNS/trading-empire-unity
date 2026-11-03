@@ -114,6 +114,7 @@ namespace TradingEmpire.Terminal
             app.CityHud.IsMuted = () => app.Audio != null && app.Audio.Muted;
             app.CityHud.View = app.CityView;
             app.Terminal = TerminalView.Build(canvasGo.transform, app.World.Trading, () => app.ShowTerminal(false), app.Challenges);
+            app.Terminal.World = app.World;
             app.MenuHud = MenuHud.Build(canvasGo.transform, app);
             app.PhotoBar = PhotoBar.Build(canvasGo.transform, app);
             app.Tutorial = TutorialCard.Build(canvasGo.transform, app, persist);

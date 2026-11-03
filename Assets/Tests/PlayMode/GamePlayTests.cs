@@ -112,7 +112,8 @@ namespace TradingEmpire.PlayModeTests
             var city = _app.World.City;
             city.GrantFunds(Money.FromDollars(50_000));
             yield return null;
-            Find("House").onClick.Invoke();
+            var houseCard = LiveButtons().First(b => LabelOf(b).Contains("<b>House</b>"));
+            houseCard.onClick.Invoke();
             yield return null;
             Assert.IsNotNull(city.State.Placement);
             city.SetHover(new Cell(11, 11));
@@ -123,7 +124,9 @@ namespace TradingEmpire.PlayModeTests
             city.Select(city.State.Buildings[0].Id);
             for (int i = 0; i < 3; i++) yield return null;
             Assert.IsNotNull(Find("Upgrade"));
-            Find("Demolish").onClick.Invoke();
+            Find("Demolish").onClick.Invoke();          // the first click asks, the second confirms
+            yield return null;
+            Find("Confirm").onClick.Invoke();
             for (int i = 0; i < 3; i++) yield return null;
             Assert.IsNull(GameObject.Find("Building b1"), "the building stayed in the scene after demolition");
         }
@@ -247,14 +250,15 @@ namespace TradingEmpire.PlayModeTests
             _app.World.City.Select(_app.World.City.State.Buildings[0].Id);
             _app.World.City.CancelPlacement();
             for (int i = 0; i < 3; i++) yield return null;
+            yield return null;
+            Assert.IsTrue(UiBlocksAt(ScreenCenterOf("Goal")), "the goal card lets clicks through");
             _app.CityHud.transform.Find("TransferPanel").gameObject.SetActive(true);
             yield return null;
             Assert.IsTrue(UiBlocksAt(ScreenCenterOf("TreasuryCard")), "the treasury card lets clicks through");
             Assert.IsTrue(UiBlocksAt(ScreenCenterOf("DateCard")), "the date card lets clicks through");
-            Assert.IsTrue(UiBlocksAt(ScreenCenterOf("BuildBar")), "the build bar lets clicks through");
+            Assert.IsTrue(UiBlocksAt(ScreenCenterOf("Grid")), "the building dock lets clicks through");
             Assert.IsTrue(UiBlocksAt(ScreenCenterOf("Inspector")), "the inspector lets clicks through");
             Assert.IsTrue(UiBlocksAt(ScreenCenterOf("TransferPanel")), "the transfer panel lets clicks through");
-            Assert.IsTrue(UiBlocksAt(ScreenCenterOf("Goal")), "the goal card lets clicks through");
             // the middle of the map is empty of UI, so a click there is the city's
             Assert.IsFalse(UiBlocksAt(new Vector2(Screen.width * 0.5f, Screen.height * 0.5f)), "the map area is covered by UI");
         }
@@ -586,6 +590,47 @@ namespace TradingEmpire.PlayModeTests
             Find("Delete all").onClick.Invoke();
             yield return null;
             Assert.AreEqual(0, ds.Items.Count);
+        }
+
+        [UnityTest]
+        public IEnumerator The_terminal_can_move_funds_measure_scale_and_go_full_chart()
+        {
+            _app = GameApp.Create(null, false, true);
+            yield return null;
+            _app.World.Trading.QuickOrder(Direction.Buy, 10, 10, 10);
+            for (int i = 0; i < 400; i++) _app.World.Trading.Step();
+            _app.World.Trading.CloseAll();
+            Find("Open Terminal").onClick.Invoke();
+            yield return null;
+            // move realized profit to the city with the terminal's own transfer card
+            var before = _app.World.City.TreasuryBalance;
+            var eligible = _app.World.Transfers.EligibleAmount();
+            if (eligible > Money.Zero)
+            {
+                Find("Move").onClick.Invoke();
+                yield return null;
+                Assert.IsTrue(_app.World.City.TreasuryBalance >= before);
+            }
+            // measure: two points make a measurement that is drawn but never saved
+            var chart = _app.Terminal.Chart;
+            _app.Terminal.RefreshNow();
+            chart.SetTool("measure");
+            var g = chart.Graphic;
+            chart.PointerDown(new Vector2(g.Plot.center.x - 60, g.Plot.center.y));
+            chart.PointerDown(new Vector2(g.Plot.center.x + 60, g.Plot.center.y + 40));
+            _app.Terminal.RefreshNow();
+            Assert.IsTrue(g.Scene.Labels.Any(l => l.Text.Contains("pips")), "the measurement label was not drawn");
+            Assert.AreEqual(0, _app.World.Trading.Drawings.Items.Count);
+            // auto scale off keeps the range, on follows the candles again
+            chart.SetAuto(false);
+            Assert.IsFalse(chart.AutoScale);
+            chart.SetAuto(true);
+            Assert.IsTrue(chart.AutoScale);
+            // full chart hides the panels and brings them back
+            _app.Terminal.ToggleFull();
+            Assert.IsFalse(_app.Terminal.transform.Find("RightPanel").gameObject.activeSelf);
+            _app.Terminal.ToggleFull();
+            Assert.IsTrue(_app.Terminal.transform.Find("RightPanel").gameObject.activeSelf);
         }
     }
 }

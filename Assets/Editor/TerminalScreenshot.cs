@@ -84,6 +84,10 @@ namespace TradingEmpire.EditorTools
             Shot(app, cam, rt, prefix + "-city-panels.png");
 
             hud.transform.Find("TransferPanel").gameObject.SetActive(false);
+            hud.transform.Find("ProgressPanel").gameObject.SetActive(true);
+            hud.RefreshNow();
+            Shot(app, cam, rt, prefix + "-city-progress.png");
+            hud.transform.Find("ProgressPanel").gameObject.SetActive(false);
             hud.transform.Find("PolicyPanel").gameObject.SetActive(true);
             Shot(app, cam, rt, prefix + "-city-policies.png");
             hud.transform.Find("PolicyPanel").gameObject.SetActive(false);

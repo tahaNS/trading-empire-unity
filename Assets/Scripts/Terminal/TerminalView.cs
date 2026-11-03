@@ -104,14 +104,19 @@ namespace TradingEmpire.Terminal
             Ui.Stretch((RectTransform)_chart.transform);
             _chart.Bind(Session);
             _chart.PlanFromPosition = PlanFrom;
+            _chart.ToggleFull = ToggleFull;
+            _chartHost = chartHost;
             Session.Drawings.Changed += MarkDirty;
 
             var right = Ui.Rect(root, "RightPanel");
-            Ui.Place(right, new Vector2(1, 0), Vector2.one, new Vector2(-rightW - 8, bottomH + 8), new Vector2(-8, -topH - 8));
+            _right = right;
+            Ui.Place(right, new Vector2(1, 0), Vector2.one, new Vector2(-rightW - 8, 8), new Vector2(-8, -topH - 8)); // the full height: account, order and transfer stack in it
             BuildRightPanel(right);
+            BuildTransferCard(right);
 
             var bottom = Ui.Rect(root, "BottomPanel");
-            Ui.Place(bottom, Vector2.zero, new Vector2(1, 0), new Vector2(8, 8), new Vector2(-8, bottomH));
+            _bottomPanel = bottom;
+            Ui.Place(bottom, Vector2.zero, new Vector2(1, 0), new Vector2(8, 8), new Vector2(-rightW - 16, bottomH));
             BuildBottomPanel(bottom);
 
             BuildToast(root);
@@ -197,7 +202,7 @@ namespace TradingEmpire.Terminal
         {
             // account card
             var acct = Ui.Rect(right, "Account");
-            Ui.Place(acct, new Vector2(0, 0.52f), Vector2.one, new Vector2(0, 4), Vector2.zero);
+            Ui.Place(acct, new Vector2(0, 1), Vector2.one, new Vector2(0, -212), Vector2.zero);
             Ui.Panel(acct, "Bg", Theme.Panel).rectTransform.SetAsFirstSibling();
             Ui.Stretch((RectTransform)acct.Find("Bg"));
             var head = Ui.Label(acct, "ACCOUNT", 12, Theme.Accent, TextAnchor.MiddleLeft, false, true);
@@ -215,7 +220,7 @@ namespace TradingEmpire.Terminal
 
             // order card
             var order = Ui.Rect(right, "Order");
-            Ui.Place(order, Vector2.zero, new Vector2(1, 0.52f), Vector2.zero, new Vector2(0, -4));
+            Ui.Place(order, new Vector2(0, 1), Vector2.one, new Vector2(0, -512), new Vector2(0, -218));
             Ui.Panel(order, "Bg", Theme.Panel).rectTransform.SetAsFirstSibling();
             Ui.Stretch((RectTransform)order.Find("Bg"));
             var oh = Ui.Label(order, "ORDER", 12, Theme.Accent, TextAnchor.MiddleLeft, false, true);
@@ -260,6 +265,20 @@ namespace TradingEmpire.Terminal
             Ui.Place((RectTransform)closeAll.transform, new Vector2(0, 0), new Vector2(1, 0), new Vector2(12, 8), new Vector2(-12, 36));
             _orderDraft.gameObject.SetActive(false);
             _draftTitle.gameObject.SetActive(false);
+        }
+
+        RectTransform _chartHost, _right, _bottomPanel;
+        bool _full;
+
+        /// <summary>Full chart: hide the account, order and positions panels so the chart fills the screen.</summary>
+        public void ToggleFull()
+        {
+            _full = !_full;
+            _right.gameObject.SetActive(!_full);
+            _bottomPanel.gameObject.SetActive(!_full);
+            _chartHost.offsetMin = _full ? new Vector2(8, 8) : new Vector2(8, 230 + 8);
+            _chartHost.offsetMax = _full ? new Vector2(-8, -84 - 8) : new Vector2(-330 - 16, -84 - 8);
+            _dirty = true;
         }
 
         TerminalGuide _guide;
@@ -361,6 +380,65 @@ namespace TradingEmpire.Terminal
             _draftInfo.text = sb.ToString();
             _place.interactable = v.Valid;
             Ui.SetButtonLabel(_place, r.Kind == EntryClass.Market ? "Place order" : "Place " + (r.Kind == EntryClass.Limit ? "limit" : "stop") + " order");
+        }
+
+        // ---- the capital transfer card (the same service the city's Finances panel uses)
+
+        public GameWorld World;
+        bool _transferToCity = true;
+        Button _dirTrading, _dirCity, _moveButton;
+        InputField _moveAmount;
+        Text _transferText, _transferNote;
+
+        void BuildTransferCard(RectTransform right)
+        {
+            var card = Ui.Rect(right, "TransferCard");
+            Ui.Place(card, Vector2.zero, Vector2.one, Vector2.zero, new Vector2(0, -518));
+            Ui.Panel(card, "Bg", Theme.Panel).rectTransform.SetAsFirstSibling();
+            Ui.Stretch((RectTransform)card.Find("Bg"));
+            var h = Ui.Label(card, "TRANSFER FUNDS", 12, Theme.Accent, TextAnchor.MiddleLeft, false, true);
+            Ui.Place(h.rectTransform, new Vector2(0, 1), new Vector2(1, 1), new Vector2(12, -26), new Vector2(-12, -4));
+            _dirTrading = Ui.Button(card, "Trading > City", () => { _transferToCity = true; _dirty = true; }, Theme.PanelAlt, 12);
+            Ui.Place((RectTransform)_dirTrading.transform, new Vector2(0, 1), new Vector2(0.5f, 1), new Vector2(12, -56), new Vector2(-3, -30));
+            _dirCity = Ui.Button(card, "City > Trading", () => { _transferToCity = false; _dirty = true; }, Theme.PanelAlt, 12);
+            Ui.Place((RectTransform)_dirCity.transform, new Vector2(0.5f, 1), new Vector2(1, 1), new Vector2(3, -56), new Vector2(-12, -30));
+            _transferText = Ui.Label(card, "", 11, Theme.Text, TextAnchor.UpperLeft, true);
+            _transferText.horizontalOverflow = HorizontalWrapMode.Wrap;
+            Ui.Place(_transferText.rectTransform, new Vector2(0, 1), new Vector2(1, 1), new Vector2(12, -108), new Vector2(-12, -62));
+            _moveAmount = Ui.Input(card, "1000", 13, InputField.ContentType.DecimalNumber);
+            Ui.Place((RectTransform)_moveAmount.transform, new Vector2(0, 1), new Vector2(0.5f, 1), new Vector2(12, -144), new Vector2(-3, -114));
+            _moveButton = Ui.Button(card, "Move", () => DoMove(), new Color(0.1f, 0.5f, 0.4f), 13);
+            Ui.Place((RectTransform)_moveButton.transform, new Vector2(0.5f, 1), new Vector2(1, 1), new Vector2(3, -144), new Vector2(-12, -114));
+            _transferNote = Ui.Label(card, "", 11, Theme.Dim, TextAnchor.UpperLeft);
+            _transferNote.horizontalOverflow = HorizontalWrapMode.Wrap;
+            Ui.Place(_transferNote.rectTransform, Vector2.zero, Vector2.one, new Vector2(12, 4), new Vector2(-12, -150));
+        }
+
+        void DoMove()
+        {
+            if (World == null || Challenges != null && Challenges.Active) return;
+            Money amount;
+            try { amount = Money.ParseDollars((_moveAmount.text ?? "").Replace(",", "")); }
+            catch (FormatException) { _transferNote.text = "Enter an amount like 1500 or 1500.50."; _transferNote.color = new Color(0.93f, 0.32f, 0.36f); return; }
+            string request = Guid.NewGuid().ToString();
+            var r = _transferToCity ? World.Transfers.Transfer(request, amount) : World.Transfers.TransferToTrading(request, amount);
+            _transferNote.text = r.Ok ? "Moved " + amount + (_transferToCity ? " to the city treasury." : " to the trading account.") : r.Message;
+            _transferNote.color = r.Ok ? Theme.Bull : Theme.Bear;
+            _dirty = true;
+        }
+
+        void RefreshTransfer()
+        {
+            if (_transferText == null) return;
+            bool locked = World == null || Challenges != null && Challenges.Active;
+            Ui.SetButtonColor(_dirTrading, _transferToCity ? Theme.Blue : Theme.PanelAlt);
+            Ui.SetButtonColor(_dirCity, !_transferToCity ? Theme.Blue : Theme.PanelAlt);
+            _moveButton.interactable = !locked;
+            if (locked) { _transferText.text = World == null ? "" : "Not available in a challenge."; return; }
+            var a = World.Trading.State.Account;
+            _transferText.text = "Trading balance  " + a.Balance + "\nCity treasury    " + World.City.TreasuryBalance + "\nYou can move     " + (_transferToCity ? World.Transfers.EligibleAmount() : World.Transfers.EligibleToTrading())
+                ;
+            if (string.IsNullOrEmpty(_transferNote.text)) { _transferNote.text = "Only realized funds can leave the trading account."; _transferNote.color = Theme.Dim; }
         }
 
         Text StatRow(RectTransform parent, string label, int index)
@@ -525,6 +603,7 @@ namespace TradingEmpire.Terminal
             var selected = UnityEngine.EventSystems.EventSystem.current != null ? UnityEngine.EventSystems.EventSystem.current.currentSelectedGameObject : null;
             if (selected != null && selected.GetComponent<InputField>() != null) return;
             if (_guide != null && _guide.Open) return; // the guide window has the keyboard
+            if (Input.GetKeyDown(KeyCode.Escape) && _full) { ToggleFull(); return; }
             if (Input.GetKeyDown(KeyCode.Escape) && Session.Draft != null) { Session.CancelDraft(); return; }
             if (Input.GetKeyDown(KeyCode.Escape) && _onBack != null) _onBack();
             if (Input.GetKeyDown(KeyCode.Space)) Session.TogglePlay();
@@ -557,6 +636,7 @@ namespace TradingEmpire.Terminal
             _chart.Refresh(Session.ChartData());
             RefreshChallenge();
             RefreshOrder();
+            RefreshTransfer();
             RefreshTabs(s, inst);
 
             if (s.Notice != null && s.Notice.Seq != _lastToastSeq)

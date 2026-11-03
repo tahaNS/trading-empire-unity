@@ -62,7 +62,7 @@ namespace TradingEmpire.Terminal
         {
             // goal card: the next mission, with a progress bar
             _goal = Ui.Card(root, "Goal", 12f).rectTransform;
-            Ui.Place(_goal, new Vector2(0, 0), new Vector2(0, 0), new Vector2(12, 104), new Vector2(372, 198));
+            Ui.Place(_goal, new Vector2(0, 1), new Vector2(0, 1), new Vector2(12, -198), new Vector2(372, -96));
             _goalTitle = Ui.Label(_goal, "", 13, Theme.Primary, TextAnchor.MiddleLeft, false, true);
             Ui.Place(_goalTitle.rectTransform, new Vector2(0, 1), Vector2.one, new Vector2(14, -28), new Vector2(-14, -6));
             _goalText = Ui.Label(_goal, "", 11, Theme.Ink, TextAnchor.UpperLeft);
@@ -130,7 +130,13 @@ namespace TradingEmpire.Terminal
 
         // ---------------------------------------------------------------- refresh
 
-        void Update() { if (_dirty) { _dirty = false; Refresh(); } }
+        void Update()
+        {
+            if (_dirty) { _dirty = false; Refresh(); }
+            // the goal card sits under the top cards, and gives way to the finance and policy panels
+            if (_goal != null && _app.CityHud != null && _goal.gameObject.activeSelf && _app.CityHud.PanelOpen) _goal.gameObject.SetActive(false);
+            else if (_goal != null && !_goal.gameObject.activeSelf && _app.CityHud != null && !_app.CityHud.PanelOpen) _dirty = true;
+        }
 
         void Clear() { foreach (var g in _dynamic) Ui.Kill(g); _dynamic.Clear(); }
 

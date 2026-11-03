@@ -81,7 +81,7 @@ namespace TradingEmpire.Terminal
 
         const string Draw =
             "Pick a tool from the rail on the left of the chart, then click on the chart (some tools take a drag, others several clicks; the hint at the top says which). Click a drawing with the cursor tool (Sel) to select it: drag it, drag its handles, then use the bar that appears to change colour, width, dashes, lock, hide or delete it.\n\n"
-            + "<b>Lines</b>  H horizontal, V vertical, Ray, Tr trend line.\n"
+            + "<b>Lines</b>  H horizontal, V vertical, Ray, Tr trend line.   <b>Ms</b> measures between two points.\n"
             + "<b>Channels</b>  Ch parallel channel (two points, then the width), Rg regression channel, Pf Andrews' pitchfork, Gn Gann fan.\n"
             + "<b>Fibonacci</b>  Fib retracement, FX trend-based extension, FC channel, FT time zones, FF speed fan, FA arcs.\n"
             + "<b>Shapes</b>  Rc rectangle, El ellipse.\n"
@@ -101,6 +101,7 @@ namespace TradingEmpire.Terminal
             "<b>Space</b>  play / pause the replay\n<b>Right arrow</b>  next candle\n<b>Shift + Right</b>  next bar of the chart timeframe\n"
             + "<b>L / S</b>  plan a long / short trade\n<b>Enter</b>  place the planned order\n<b>Esc</b>  cancel the tool or selection, then back to the city\n"
             + "<b>V</b>  cursor     <b>H</b>  horizontal line     <b>T</b>  trend line     <b>R</b>  rectangle     <b>G</b>  Fibonacci     <b>X</b>  text note\n"
-            + "<b>Delete</b>  remove the selected drawing\n<b>Mouse wheel</b>  zoom the chart";
+            + "<b>M</b>  measure (pips, bars, time, percent)     <b>A</b>  auto scale on / off     <b>F</b>  full chart (Esc leaves it)\n"
+            + "<b>Delete</b>  remove the selected drawing\n<b>Mouse wheel</b>  zoom the chart     <b>Ctrl + wheel</b>  scale the price axis";
     }
 }

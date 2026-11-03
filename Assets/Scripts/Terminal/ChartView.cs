@@ -20,6 +20,7 @@ namespace TradingEmpire.Terminal
         static readonly ToolDef[] Tools =
         {
             new ToolDef(null, "Sel", "Select: click a drawing to select, drag it or its handles. Del deletes."),
+            new ToolDef("measure", "Ms", "Measure: click two points to see the pips, bars, time and percent between them (M)."),
             new ToolDef("hline", "H", "Horizontal line: click a price."),
             new ToolDef("vline", "V", "Vertical line: click a time."),
             new ToolDef("hray", "Ray", "Horizontal ray: click where it starts."),
@@ -53,7 +54,20 @@ namespace TradingEmpire.Terminal
         readonly List<Text> _indLabels = new List<Text>();
         IndicatorPanel _indicatorPanel;
         ObjectPanel _objectPanel;
-        Button _indicatorButton, _objectButton;
+        Button _indicatorButton, _objectButton, _autoButton;
+        /// <summary>Set by the terminal: switches between the chart with its panels and the chart alone.</summary>
+        public Action ToggleFull;
+        (Anchor a, Anchor b)? _measure;
+
+        /// <summary>Auto scale on: the price range follows the candles. Off: it stays where it is.</summary>
+        public void SetAuto(bool on)
+        {
+            _graphic.ManualRange = !on;
+            Ui.SetButtonLabel(_autoButton, on ? "Auto scale on" : "Auto scale off");
+            Ui.SetButtonColor(_autoButton, on ? Theme.PanelAlt : Theme.Blue);
+            _graphic.SetVerticesDirty();
+        }
+        public bool AutoScale { get { return !_graphic.ManualRange; } }
         Text _empty, _hint;
         bool _hover;
 
@@ -99,6 +113,10 @@ namespace TradingEmpire.Terminal
             view._objectPanel = ObjectPanel.Create(rt, view);
             view._objectButton = Ui.Button(rt, "Objects", () => { view._indicatorPanel.Show(false); view._objectPanel.Toggle(); }, Theme.PanelAlt, 11);
             Ui.Place((RectTransform)view._objectButton.transform, new Vector2(1, 1), new Vector2(1, 1), new Vector2(-132, -26), new Vector2(-84, -4));
+            view._autoButton = Ui.Button(rt, "Auto scale on", () => view.SetAuto(!view.AutoScale), Theme.PanelAlt, 11);
+            Ui.Place((RectTransform)view._autoButton.transform, new Vector2(1, 1), new Vector2(1, 1), new Vector2(-366, -26), new Vector2(-256, -4));
+            var full = Ui.Button(rt, "Full chart", () => { if (view.ToggleFull != null) view.ToggleFull(); }, Theme.PanelAlt, 11);
+            Ui.Place((RectTransform)full.transform, new Vector2(1, 1), new Vector2(1, 1), new Vector2(-462, -26), new Vector2(-372, -4));
             view._indicatorButton = Ui.Button(rt, "Indicators", () => { view._objectPanel.Show(false); view._indicatorPanel.Toggle(); }, Theme.PanelAlt, 11);
             Ui.Place((RectTransform)view._indicatorButton.transform, new Vector2(1, 1), new Vector2(1, 1), new Vector2(-250, -26), new Vector2(-138, -4));
             return view;
@@ -176,7 +194,7 @@ namespace TradingEmpire.Terminal
             var del = Ui.Button(strip, "Clr", () => { if (_session != null) _session.Drawings.Clear(); _selectedId = null; }, new Color(0.45f, 0.18f, 0.2f), 10);
             Ui.Place((RectTransform)del.transform, new Vector2(0, 0), new Vector2(1, 0), new Vector2(2, 2), new Vector2(-2, 26));
             _hint = Ui.Label(_root, "", 11, Theme.Dim, TextAnchor.MiddleLeft);
-            Ui.Place(_hint.rectTransform, new Vector2(0, 1), new Vector2(1, 1), new Vector2(48, -24), new Vector2(-90, -4));
+            Ui.Place(_hint.rectTransform, new Vector2(0, 1), new Vector2(1, 1), new Vector2(48, -24), new Vector2(-470, -4));
         }
 
         void BuildProps()
@@ -307,7 +325,16 @@ namespace TradingEmpire.Terminal
             if (_propsDirty) RefreshProps();
             if (!_hover) return;
             float wheel = Input.mouseScrollDelta.y;
-            if (Mathf.Abs(wheel) > 0.01f && TopHitIsChart())
+            if (Mathf.Abs(wheel) > 0.01f && TopHitIsChart() && (Input.GetKey(KeyCode.LeftControl) || Input.GetKey(KeyCode.RightControl) || Input.GetKey(KeyCode.LeftCommand)))
+            {
+                // Ctrl + wheel: scale the price axis (this turns auto scale off)
+                if (!_graphic.ManualRange) SetAuto(false);
+                long mid = (_graphic.Lo + _graphic.Hi) / 2, half = Math.Max(2, (long)((_graphic.Hi - _graphic.Lo) / 2 * (wheel > 0 ? 0.88 : 1.14)));
+                _graphic.Lo = mid - half; _graphic.Hi = mid + half;
+                _graphic.SetVerticesDirty();
+                LayoutLabels();
+            }
+            else if (Mathf.Abs(wheel) > 0.01f && TopHitIsChart())
             {
                 _graphic.VisibleBars = Mathf.Clamp(Mathf.RoundToInt(_graphic.VisibleBars * (wheel > 0 ? 0.88f : 1.14f)), 20, 600);
                 _graphic.SetVerticesDirty();
@@ -320,13 +347,16 @@ namespace TradingEmpire.Terminal
         void HandleDrawingInput()
         {
             if (Typing()) return;
-            if (Input.GetKeyDown(KeyCode.Escape)) { if (_pending.Count > 0 || _tool != null) SetTool(null); else Select(null); }
+            if (Input.GetKeyDown(KeyCode.Escape)) { if (_pending.Count > 0 || _tool != null) SetTool(null); else if (_measure.HasValue) _measure = null; else Select(null); }
             if (Input.GetKeyDown(KeyCode.V)) SetTool(null);
             if (Input.GetKeyDown(KeyCode.H)) SetTool("hline");
             if (Input.GetKeyDown(KeyCode.T)) SetTool("trend");
             if (Input.GetKeyDown(KeyCode.R)) SetTool("rect");
             if (Input.GetKeyDown(KeyCode.G)) SetTool("fib");
             if (Input.GetKeyDown(KeyCode.X)) SetTool("text");
+            if (Input.GetKeyDown(KeyCode.M)) SetTool("measure");
+            if (Input.GetKeyDown(KeyCode.A)) SetAuto(!AutoScale);
+            if (Input.GetKeyDown(KeyCode.F) && ToggleFull != null) ToggleFull();
             if ((Input.GetKeyDown(KeyCode.Delete) || Input.GetKeyDown(KeyCode.Backspace)) && _selectedId != null) DeleteSelected();
             if (Input.GetMouseButtonDown(1)) SetTool(null);
 
@@ -408,6 +438,7 @@ namespace TradingEmpire.Terminal
             switch (tool)
             {
                 case "up": case "down": case "long": case "short": return 0;
+                case "measure": return 2;
                 default: return DrawingKinds.AnchorCount.TryGetValue(tool, out var n) ? n : 0;
             }
         }
@@ -444,6 +475,7 @@ namespace TradingEmpire.Terminal
 
         public void Place(string tool, List<Anchor> anchors)
         {
+            if (tool == "measure") { _measure = (anchors[0], anchors[1]); _pending.Clear(); _tool = null; _propsDirty = true; return; }
             var d = Build(tool, anchors, NextColor());
             string id = _session.Drawings.Add(d);
             _colorIndex++;
@@ -556,6 +588,25 @@ namespace TradingEmpire.Terminal
             return lines;
         }
 
+        void AddMeasure(DrawingScene scene, ChartMap map)
+        {
+            var (a, b) = _measure.Value;
+            var pa = new Vector2(map.X(a.Time), map.Y(a.Price)); var pb = new Vector2(map.X(b.Time), map.Y(b.Price));
+            bool up = b.Price >= a.Price;
+            var col = up ? Theme.Bull : Theme.Bear;
+            var c1 = new Vector2(pa.x, pb.y); var c2 = new Vector2(pb.x, pa.y);
+            scene.Fills.Add(new SceneFill { Points = new[] { pa, c1, pb, c2 }, Color = new Color(col.r, col.g, col.b, 0.14f), DrawingId = "measure" });
+            Action<Vector2, Vector2, float> line = (p, q, w) => scene.Lines.Add(new SceneLine { A = p, B = q, Color = col, Width = w, DrawingId = "measure" });
+            line(pa, c1, 1f); line(c1, pb, 1f); line(pb, c2, 1f); line(c2, pa, 1f); line(pa, pb, 1.5f);
+            double pips = Math.Abs(b.Price - a.Price) / (double)_data.PipPoints;
+            double bars = Math.Abs(_graphic.IndexOfTime(b.Time) - _graphic.IndexOfTime(a.Time));
+            long ms = Math.Abs(b.Time - a.Time);
+            string dur = ms >= 86400000L ? (ms / 86400000.0).ToString("0.#", CultureInfo.InvariantCulture) + " d" : ms >= 3600000L ? (ms / 3600000.0).ToString("0.#", CultureInfo.InvariantCulture) + " h" : (ms / 60000L) + " min";
+            double pct = a.Price != 0 ? (b.Price - a.Price) / a.Price * 100 : 0;
+            string text = (up ? "+" : "-") + pips.ToString("0.0", CultureInfo.InvariantCulture) + " pips  (" + (up ? "+" : "-") + Units.FormatPrice((long)Math.Round(Math.Abs(b.Price - a.Price)), _data.Digits) + ")   " + Math.Round(bars) + " bars   " + dur + "   " + pct.ToString("+0.00;-0.00", CultureInfo.InvariantCulture) + "%";
+            scene.Labels.Add(new SceneLabel { At = new Vector2(Mathf.Min(pa.x, pb.x) + 6, Mathf.Max(pa.y, pb.y) + 12), Text = text, Color = Color.white, Anchor = TextAnchor.MiddleLeft, DrawingId = "measure" });
+        }
+
         List<Vector2> ClosesBetween(long t0, long t1)
         {
             var g = _graphic; var list = new List<Vector2>();
@@ -584,6 +635,7 @@ namespace TradingEmpire.Terminal
                 preview.Data.Set("dash", "dashed");
             }
             g.Scene = DrawingRenderer.Build(_session.Drawings.Items, map, _selectedId, preview);
+            if (_measure.HasValue) AddMeasure(g.Scene, map);
         }
 
         void LayoutLabels()
