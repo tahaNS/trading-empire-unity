@@ -98,6 +98,10 @@ namespace TradingEmpire.EditorTools
             Shot(app, cam, rt, prefix + "-menu.png");
             app.MenuHud.SelectTab(4);
             Shot(app, cam, rt, prefix + "-menu-help.png");
+            UnityEngine.PlayerPrefs.SetInt("te.god", 1);
+            app.MenuHud.SelectTab(0);
+            Shot(app, cam, rt, prefix + "-menu-god.png");
+            UnityEngine.PlayerPrefs.SetInt("te.god", 0);
             app.MenuHud.SelectTab(0);
             Shot(app, cam, rt, prefix + "-menu-game.png");
             app.MenuHud.Show(false);

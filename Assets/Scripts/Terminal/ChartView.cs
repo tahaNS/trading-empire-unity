@@ -461,7 +461,7 @@ namespace TradingEmpire.Terminal
             if (_propsDirty) RefreshProps();
             if (!_hover) return;
             float wheel = Input.mouseScrollDelta.y;
-            if (Mathf.Abs(wheel) > 0.01f && TopHitIsChart() && (Input.GetKey(KeyCode.LeftControl) || Input.GetKey(KeyCode.RightControl) || Input.GetKey(KeyCode.LeftCommand)))
+            if (Mathf.Abs(wheel) > 0.01f && TopHitIsChart() && (Input.GetKey(KeyCode.LeftControl) || Input.GetKey(KeyCode.RightControl) || Input.GetKey(KeyCode.LeftCommand) || Input.GetKey(KeyCode.LeftShift) || Input.GetKey(KeyCode.RightShift)))
             {
                 // Ctrl + wheel: scale the price axis (this turns auto scale off)
                 if (!_graphic.ManualRange) SetAuto(false);

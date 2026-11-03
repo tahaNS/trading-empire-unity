@@ -163,6 +163,12 @@ namespace TradingEmpire.Terminal
                     x += 34;
                 }
                 y += 28;
+                double width = cfg.Width ?? 1.5;
+                Txt("Line width", 16, y + 5, 80, 16, 11, Theme.Dim);
+                Btn("-", () => _session.Indicators.Update(cfg.Id, c => c.Width = Math.Max(0.5, Math.Round(((c.Width ?? 1.5) - 0.5) * 2) / 2)), 90, y + 2, 26, 22, null, 12);
+                Txt(width.ToString("0.0", CultureInfo.InvariantCulture), 120, y + 5, 40, 16, 11, Theme.Text, true);
+                Btn("+", () => _session.Indicators.Update(cfg.Id, c => c.Width = Math.Min(6, Math.Round(((c.Width ?? 1.5) + 0.5) * 2) / 2)), 154, y + 2, 26, 22, null, 12);
+                y += 28;
                 Txt(def.About, 16, y + 2, W - 40, 44, 10, Theme.Dim, false, true);
                 y += 50;
             }

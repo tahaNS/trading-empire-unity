@@ -62,6 +62,13 @@ namespace TradingEmpire.Terminal
             d["long"] = cat(new[] { poly(new[] { 0.1f, 0.12f, 0.9f, 0.12f, 0.9f, 0.88f, 0.1f, 0.88f, 0.1f, 0.12f }), L(0.1f, 0.4f, 0.9f, 0.4f), L(0.5f, 0.55f, 0.5f, 0.8f), L(0.5f, 0.8f, 0.4f, 0.7f), L(0.5f, 0.8f, 0.6f, 0.7f) });
             d["short"] = cat(new[] { poly(new[] { 0.1f, 0.12f, 0.9f, 0.12f, 0.9f, 0.88f, 0.1f, 0.88f, 0.1f, 0.12f }), L(0.1f, 0.6f, 0.9f, 0.6f), L(0.5f, 0.45f, 0.5f, 0.2f), L(0.5f, 0.2f, 0.4f, 0.3f), L(0.5f, 0.2f, 0.6f, 0.3f) });
             d["trash"] = cat(new[] { L(0.15f, 0.82f, 0.85f, 0.82f), L(0.38f, 0.82f, 0.38f, 0.94f), L(0.38f, 0.94f, 0.62f, 0.94f), L(0.62f, 0.94f, 0.62f, 0.82f), poly(new[] { 0.22f, 0.82f, 0.28f, 0.08f, 0.72f, 0.08f, 0.78f, 0.82f }), L(0.42f, 0.66f, 0.42f, 0.24f), L(0.58f, 0.66f, 0.58f, 0.24f) });
+            d["list"] = cat(new[] { L(0.3f, 0.78f, 0.92f, 0.78f), L(0.3f, 0.5f, 0.92f, 0.5f), L(0.3f, 0.22f, 0.92f, 0.22f), dot(0.1f, 0.78f), dot(0.1f, 0.5f), dot(0.1f, 0.22f) });
+            d["orders"] = cat(new[] { arc(0.5f, 0.5f, 0.4f, 0.4f, 0f, Mathf.PI * 2, 16), L(0.5f, 0.5f, 0.5f, 0.78f), L(0.5f, 0.5f, 0.7f, 0.4f) });
+            d["history"] = cat(new[] { arc(0.5f, 0.5f, 0.38f, 0.38f, 0.5f, Mathf.PI * 2 - 0.4f, 14), L(0.5f, 0.5f, 0.5f, 0.72f), L(0.5f, 0.5f, 0.66f, 0.42f), L(0.12f, 0.62f, 0.2f, 0.84f), L(0.12f, 0.62f, 0.34f, 0.7f) });
+            d["journal"] = cat(new[] { poly(new[] { 0.2f, 0.1f, 0.8f, 0.1f, 0.8f, 0.9f, 0.2f, 0.9f, 0.2f, 0.1f }), L(0.34f, 0.68f, 0.66f, 0.68f), L(0.34f, 0.48f, 0.66f, 0.48f), L(0.34f, 0.28f, 0.54f, 0.28f) });
+            d["stats"] = cat(new[] { L(0.2f, 0.1f, 0.2f, 0.4f), L(0.45f, 0.1f, 0.45f, 0.7f), L(0.7f, 0.1f, 0.7f, 0.55f), L(0.9f, 0.1f, 0.9f, 0.85f) });
+            d["bar"] = cat(new[] { L(0.15f, 0.1f, 0.15f, 0.5f), L(0.38f, 0.1f, 0.38f, 0.8f), L(0.62f, 0.1f, 0.62f, 0.35f), L(0.85f, 0.1f, 0.85f, 0.65f), L(0.05f, 0.1f, 0.95f, 0.1f) });
+            d["expand"] = cat(new[] { L(0.1f, 0.9f, 0.1f, 0.62f), L(0.1f, 0.9f, 0.38f, 0.9f), L(0.9f, 0.1f, 0.9f, 0.38f), L(0.9f, 0.1f, 0.62f, 0.1f), L(0.1f, 0.9f, 0.4f, 0.6f), L(0.9f, 0.1f, 0.6f, 0.4f) });
             d["close"] = cat(new[] { L(0.15f, 0.15f, 0.85f, 0.85f), L(0.15f, 0.85f, 0.85f, 0.15f) });
             return d;
         }
@@ -96,6 +103,18 @@ namespace TradingEmpire.Terminal
             v.position = new Vector3(x0, y0); vh.AddVert(v); v.position = new Vector3(x0, y1); vh.AddVert(v);
             v.position = new Vector3(x1, y1); vh.AddVert(v); v.position = new Vector3(x1, y0); vh.AddVert(v);
             vh.AddTriangle(i, i + 1, i + 2); vh.AddTriangle(i + 2, i + 3, i);
+        }
+
+        /// <summary>Put an icon at the left of a button's label and move the label over a little.</summary>
+        public static IconGraphic AddTo(Button b, string icon, Color color, float size = 14f)
+        {
+            var ic = Add(b.transform, icon, color, 1.4f);
+            var rt = ic.rectTransform;
+            rt.anchorMin = new Vector2(0, 0.5f); rt.anchorMax = new Vector2(0, 0.5f); rt.pivot = new Vector2(0, 0.5f);
+            rt.sizeDelta = new Vector2(size, size); rt.anchoredPosition = new Vector2(8, 0);
+            var label = b.transform.Find("Label");
+            if (label != null) ((RectTransform)label).offsetMin = new Vector2(size + 6, 0);
+            return ic;
         }
 
         public static IconGraphic Add(Transform parent, string icon, Color color, float weight = 1.5f)

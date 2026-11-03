@@ -248,8 +248,10 @@ namespace TradingEmpire.Terminal
             _orderStart = Ui.Rect(order, "Start");
             Ui.Stretch(_orderStart, 0, 44, 0, 28);
             var longBtn = Ui.Button(_orderStart, "LONG  (L)", () => Session.StartDraft(Direction.Buy), new Color(0.1f, 0.5f, 0.4f), 15);
+            IconGraphic.AddTo(longBtn, "up", Color.white, 16f);
             Ui.Place((RectTransform)longBtn.transform, new Vector2(0, 1), new Vector2(0.5f, 1), new Vector2(12, -50), new Vector2(-4, -8));
             var shortBtn = Ui.Button(_orderStart, "SHORT  (S)", () => Session.StartDraft(Direction.Sell), new Color(0.65f, 0.2f, 0.24f), 15);
+            IconGraphic.AddTo(shortBtn, "down", Color.white, 16f);
             Ui.Place((RectTransform)shortBtn.transform, new Vector2(0.5f, 1), Vector2.one, new Vector2(4, -50), new Vector2(-12, -8));
             var note = Ui.Label(_orderStart, "Plan a trade: three lines appear on the chart (entry, stop-loss, take-profit) that you can drag. Drag the entry away from the price to place a limit or stop order instead of a market order.", 11, Theme.Dim, TextAnchor.UpperLeft);
             note.horizontalOverflow = HorizontalWrapMode.Wrap;
@@ -322,14 +324,19 @@ namespace TradingEmpire.Terminal
             _autoBtn = Ui.Button(inner, "Auto scale on  A", () => _chart.SetAuto(!_chart.AutoScale), Theme.PanelAlt, 11);
             Ui.Place((RectTransform)_autoBtn.transform, new Vector2(0, 0), new Vector2(0, 1), new Vector2(530, 4), new Vector2(648, -4));
             _objectsBtn = Ui.Button(inner, "Objects", () => _chart.ToggleObjectPanel(), Theme.PanelAlt, 11);
+            IconGraphic.AddTo(_objectsBtn, "list", Theme.Dim, 12f);
             Ui.Place((RectTransform)_objectsBtn.transform, new Vector2(0, 0), new Vector2(0, 1), new Vector2(654, 4), new Vector2(752, -4));
             _indicatorsBtn = Ui.Button(inner, "Indicators", () => _chart.ToggleIndicatorPanel(), Theme.PanelAlt, 11);
+            IconGraphic.AddTo(_indicatorsBtn, "bar", Theme.Dim, 12f);
             Ui.Place((RectTransform)_indicatorsBtn.transform, new Vector2(0, 0), new Vector2(0, 1), new Vector2(758, 4), new Vector2(868, -4));
             _fullBtn = Ui.Button(inner, "Full chart  F", () => ToggleFull(), Theme.PanelAlt, 11);
+            IconGraphic.AddTo(_fullBtn, "expand", Theme.Dim, 12f);
             Ui.Place((RectTransform)_fullBtn.transform, new Vector2(1, 0), new Vector2(1, 1), new Vector2(-112, 4), new Vector2(-6, -4));
             _topShort = Ui.Button(inner, "Short  S", () => Session.StartDraft(Direction.Sell), new Color(0.65f, 0.2f, 0.24f), 11);
+            IconGraphic.AddTo(_topShort, "down", Color.white, 11f);
             Ui.Place((RectTransform)_topShort.transform, new Vector2(1, 0), new Vector2(1, 1), new Vector2(-196, 4), new Vector2(-118, -4));
             _topLong = Ui.Button(inner, "Long  L", () => Session.StartDraft(Direction.Buy), new Color(0.1f, 0.5f, 0.4f), 11);
+            IconGraphic.AddTo(_topLong, "up", Color.white, 11f);
             Ui.Place((RectTransform)_topLong.transform, new Vector2(1, 0), new Vector2(1, 1), new Vector2(-278, 4), new Vector2(-202, -4));
             _chart.StateChanged = RefreshChartTop;
         }
@@ -587,9 +594,11 @@ namespace TradingEmpire.Terminal
             {
                 int index = i;
                 var b = Ui.Button(bottom, names[i], () => { _tab = index; _dirty = true; }, Theme.PanelAlt, 12);
-                Ui.Place((RectTransform)b.transform, new Vector2(0, 1), new Vector2(0, 1), new Vector2(x, -34), new Vector2(x + 128, -8));
+                float tabW = i == 0 ? 160f : i == 2 ? 132f : 122f;
+                Ui.Place((RectTransform)b.transform, new Vector2(0, 1), new Vector2(0, 1), new Vector2(x, -34), new Vector2(x + tabW, -8));
+                IconGraphic.AddTo(b, new[] { "list", "orders", "history", "journal", "stats" }[i], Theme.Dim);
                 _tabButtons.Add(b);
-                x += 132;
+                x += tabW + 4f;
             }
             _tabContent = Ui.Rect(bottom, "TabContent");
             Ui.Place(_tabContent, Vector2.zero, Vector2.one, new Vector2(10, 6), new Vector2(-10, -40));

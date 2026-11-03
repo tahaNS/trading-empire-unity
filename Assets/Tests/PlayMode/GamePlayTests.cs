@@ -23,7 +23,7 @@ namespace TradingEmpire.PlayModeTests
         }
 
         // the tests click settings buttons; they must not leave the player's own settings changed
-        static readonly string[] PrefKeys = { "te.uiScale", "te.colorBlind", "te.muted", "te.welcomed", "te.tutorial", "te.tutorial.step", "te.offerSeen" };
+        static readonly string[] PrefKeys = { "te.uiScale", "te.colorBlind", "te.muted", "te.welcomed", "te.tutorial", "te.tutorial.step", "te.offerSeen", "te.god" };
         readonly System.Collections.Generic.Dictionary<string, string> _savedPrefs = new System.Collections.Generic.Dictionary<string, string>();
 
         [SetUp]
@@ -709,6 +709,54 @@ namespace TradingEmpire.PlayModeTests
             chart.Select(null);
             yield return null;
             Assert.IsFalse(chart.FibWindow.Visible);
+        }
+
+        [UnityTest]
+        public IEnumerator God_mode_drawing_rename_and_indicator_width_work()
+        {
+            _app = GameApp.Create(null, false, true);
+            yield return null;
+            // god mode in the Game menu: money goes through the real treasury, time skips forward
+            Find("Game").onClick.Invoke();
+            yield return null;
+            Find("[ ]  God mode").onClick.Invoke();
+            yield return null;
+            var before = _app.World.City.TreasuryBalance;
+            var tradingBefore = _app.World.Trading.State.Account.Balance;
+            foreach (var b in LiveButtons().Where(x => LabelOf(x) == "+$10k").ToArray()) b.onClick.Invoke(); // one row for the city, one for the trading account
+            yield return null;
+            Assert.AreEqual(before + Money.FromDollars(10000), _app.World.City.TreasuryBalance);
+            Assert.AreEqual(tradingBefore + Money.FromDollars(10000), _app.World.Trading.State.Account.Balance);
+            long t0 = _app.World.Clock.Time;
+            Find("+7d").onClick.Invoke();
+            yield return null;
+            Assert.Greater(_app.World.Clock.Time, t0);
+            Find("Close").onClick.Invoke();
+            yield return null;
+            // the terminal: rename a drawing, change an indicator's line width
+            Find("Open Terminal").onClick.Invoke();
+            yield return null;
+            for (int i = 0; i < 30; i++) _app.World.Trading.Step();
+            var ds = _app.World.Trading.Drawings;
+            string id = ds.Add(DrawingKinds.HLine(110000, "#f2c25b"));
+            var chart = _app.Terminal.Chart;
+            chart.ToggleObjectPanel();
+            yield return null;
+            chart.ObjectWindow.RefreshNow();
+            Find("ab").onClick.Invoke();
+            yield return null;
+            var field = UnityEngine.Object.FindObjectsByType<InputField>(FindObjectsSortMode.None).First(f => f.isActiveAndEnabled && f.transform.parent != null && f.transform.parent.name.StartsWith("Row "));
+            field.text = "my support";
+            field.onEndEdit.Invoke("my support");
+            yield return null;
+            Assert.AreEqual("my support", ds.Get(id).Name);
+            string ind = _app.World.Trading.Indicators.Add("sma");
+            _app.World.Trading.Indicators.Update(ind, c => c.Width = 3);
+            Assert.AreEqual(3.0, _app.World.Trading.Indicators.Items[0].Width);
+            var w = new SaveManager(_app.World, new MemorySaveStorage());
+            var w2 = GameWorld.Create();
+            Assert.IsTrue(new SaveManager(w2, new MemorySaveStorage()).Import(w.ExportText()).Ok);
+            Assert.AreEqual(3.0, w2.Trading.Indicators.Items[0].Width);
         }
     }
 }

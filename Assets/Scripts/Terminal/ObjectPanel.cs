@@ -19,8 +19,9 @@ namespace TradingEmpire.Terminal
         Text _count;
         Button _hideAll;
         readonly List<GameObject> _dynamic = new List<GameObject>();
-        string _selectedSeen;
+        string _selectedSeen, _renaming;
         bool _dirty = true;
+        InputField _focus;
         const float W = 330f, AxisPad = 84f;
 
         public static ObjectPanel Create(Transform parent, ChartView chart)
@@ -48,7 +49,7 @@ namespace TradingEmpire.Terminal
             Ui.Place((RectTransform)close.transform, new Vector2(1, 1), new Vector2(1, 1), new Vector2(-34, -28), new Vector2(-8, -6));
             var del = Ui.Button(root, "Delete all", () => { if (_session != null) _session.Drawings.Clear(); }, new Color(0.45f, 0.18f, 0.2f), 11);
             Ui.Place((RectTransform)del.transform, new Vector2(1, 0), new Vector2(1, 0), new Vector2(-100, 6), new Vector2(-8, 30));
-            var hint = Ui.Label(root, "Click a name to select it on the chart.", 10, Theme.Dim, TextAnchor.MiddleLeft);
+            var hint = Ui.Label(root, "Click a name to select it; ab renames it.", 10, Theme.Dim, TextAnchor.MiddleLeft);
             Ui.Place(hint.rectTransform, new Vector2(0, 0), new Vector2(1, 0), new Vector2(12, 6), new Vector2(-110, 30));
 
             var view = Ui.Rect(root, "Viewport");
@@ -85,6 +86,7 @@ namespace TradingEmpire.Terminal
             if (!gameObject.activeSelf) return;
             if (_chart.SelectedId != _selectedSeen) _dirty = true; // the highlighted row follows the chart's selection
             if (_dirty) { _dirty = false; Rebuild(); }
+            if (_focus != null) { _focus.Select(); _focus.ActivateInputField(); _focus = null; }
         }
 
         void Rebuild()
@@ -92,6 +94,7 @@ namespace TradingEmpire.Terminal
             if (_session == null) return;
             foreach (var g in _dynamic) Ui.Kill(g);
             _dynamic.Clear();
+            _focus = null;
             _selectedSeen = _chart.SelectedId;
             var items = _session.Drawings.Items;
             _count.text = items.Count.ToString();
@@ -119,9 +122,34 @@ namespace TradingEmpire.Terminal
                 Color col; ColorUtility.TryParseHtmlString(d.Color ?? "#6ea8ff", out col);
                 var sw = Ui.Box(row.transform, "Swatch", col);
                 Ui.Place(sw.rectTransform, new Vector2(0, 0), new Vector2(0, 1), new Vector2(6, 8), new Vector2(14, -8));
-                var name = Ui.Button(row.transform, d.Name ?? Label(d), () => { _chart.Select(id); _dirty = true; }, Color.clear, 11, d.Hidden ? Theme.Dim : Theme.Text);
-                Ui.Place((RectTransform)name.transform, new Vector2(0, 0), new Vector2(1, 1), new Vector2(18, 2), new Vector2(-124, -2));
-                name.GetComponentInChildren<Text>().alignment = TextAnchor.MiddleLeft;
+                string shown = string.IsNullOrEmpty(d.Name) ? Label(d) : d.Name;
+                if (_renaming == id)
+                {
+                    // rename in place: type a name and press Enter (empty goes back to the default name)
+                    var input = Ui.Input(row.transform, d.Name ?? "", 11);
+                    Ui.Place((RectTransform)input.transform, new Vector2(0, 0), new Vector2(1, 1), new Vector2(18, 3), new Vector2(-150, -3));
+                    input.characterLimit = 40;
+                    var ph = Ui.Label(input.transform, Label(d), 11, Theme.Dim, TextAnchor.MiddleLeft, true);
+                    Ui.Stretch(ph.rectTransform, 6, 0, 6, 0);
+                    input.placeholder = ph;
+                    input.onEndEdit.AddListener(text =>
+                    {
+                        _renaming = null;
+                        string clean = (text ?? "").Trim();
+                        if (clean.Length > 0) _session.Drawings.Update(id, x => x.Data.Set("name", clean));
+                        else _session.Drawings.Update(id, x => x.Data.Set("name", ""));
+                        _dirty = true;
+                    });
+                    _dynamic.Add(input.gameObject);
+                    _focus = input;
+                }
+                else
+                {
+                    var name = Ui.Button(row.transform, shown, () => { _chart.Select(id); _dirty = true; }, Color.clear, 11, d.Hidden ? Theme.Dim : Theme.Text);
+                    Ui.Place((RectTransform)name.transform, new Vector2(0, 0), new Vector2(1, 1), new Vector2(18, 2), new Vector2(-150, -2));
+                    name.GetComponentInChildren<Text>().alignment = TextAnchor.MiddleLeft;
+                }
+                Mini(row.transform, "ab", -144, () => { _renaming = id; _dirty = true; }, _renaming == id);
                 Mini(row.transform, d.Hidden ? "o" : "*", -118, () => _session.Drawings.Update(id, x => x.Data.Set("hidden", !x.Hidden)), !d.Hidden);
                 Mini(row.transform, d.Locked ? "L" : "l", -92, () => _session.Drawings.Update(id, x => x.Data.Set("locked", !x.Locked)), d.Locked);
                 Mini(row.transform, "^", -66, () => _session.Drawings.Move(id, "up"), false);

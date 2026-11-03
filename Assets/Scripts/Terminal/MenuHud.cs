@@ -16,7 +16,8 @@ namespace TradingEmpire.Terminal
     {
         GameApp _app;
         GameWorld World { get { return _app.World; } }
-        RectTransform _modal, _content, _goal, _over;
+        RectTransform _modal, _content, _goal, _over, _viewport;
+        bool _god;
         Text _title, _body, _message, _goalTitle, _goalText, _goalProgress, _overText;
         Image _goalFill;
         InputField _path;
@@ -99,8 +100,19 @@ namespace TradingEmpire.Terminal
                 _tabs.Add(b);
                 x += 124;
             }
-            _content = Ui.Rect(win, "Content");
-            Ui.Place(_content, Vector2.zero, Vector2.one, new Vector2(18, 40), new Vector2(-18, -82));
+            // the tab content scrolls (mouse wheel) when it is taller than the window
+            var viewport = Ui.Rect(win, "Viewport");
+            Ui.Place(viewport, Vector2.zero, Vector2.one, new Vector2(18, 40), new Vector2(-18, -82));
+            var vimg = viewport.gameObject.AddComponent<Image>();
+            vimg.color = new Color(0, 0, 0, 0.001f);
+            viewport.gameObject.AddComponent<RectMask2D>();
+            _viewport = viewport;
+            _content = Ui.Rect(viewport, "Content");
+            _content.anchorMin = new Vector2(0, 1); _content.anchorMax = new Vector2(1, 1); _content.pivot = new Vector2(0.5f, 1);
+            _content.offsetMin = Vector2.zero; _content.offsetMax = Vector2.zero;
+            var scroll = viewport.gameObject.AddComponent<ScrollRect>();
+            scroll.viewport = viewport; scroll.content = _content; scroll.horizontal = false;
+            scroll.movementType = ScrollRect.MovementType.Clamped; scroll.scrollSensitivity = 24f;
             _body = Ui.Label(_content, "", 12, Theme.Ink, TextAnchor.UpperLeft, true);
             _body.horizontalOverflow = HorizontalWrapMode.Wrap;
             _message = Ui.Label(win, "", 12, Theme.Muted, TextAnchor.MiddleLeft);
@@ -171,6 +183,21 @@ namespace TradingEmpire.Terminal
             else if (_tab == 2) AchievementsTab();
             else if (_tab == 3) SettingsTab();
             else HelpTab();
+            FitContent();
+        }
+
+        /// <summary>Make the scrolling area as tall as what the tab built.</summary>
+        void FitContent()
+        {
+            float needed = 0;
+            foreach (var g in _dynamic)
+            {
+                if (g == null) continue;
+                var rt = g.transform as RectTransform;
+                if (rt != null) needed = Mathf.Max(needed, -rt.offsetMin.y);
+            }
+            if (_body.text.Length > 0) needed = Mathf.Max(needed, _body.preferredHeight + 8f);
+            _content.sizeDelta = new Vector2(0, Mathf.Max(_viewport.rect.height, needed + 8f));
         }
 
         void RefreshGoal()
@@ -212,7 +239,7 @@ namespace TradingEmpire.Terminal
             Ui.Place(label.rectTransform, new Vector2(0, 1), new Vector2(1, 1), new Vector2(0, -y - 22), new Vector2(0, -y));
             _dynamic.Add(label.gameObject);
             y += 28;
-            if (backups.Count == 0) { var none = Ui.Label(_content, "None yet: one is made the first time you save each day.", 12, Theme.Muted, TextAnchor.MiddleLeft); Ui.Place(none.rectTransform, new Vector2(0, 1), new Vector2(1, 1), new Vector2(0, -y - 24), new Vector2(0, -y)); _dynamic.Add(none.gameObject); }
+            if (backups.Count == 0) { var none = Ui.Label(_content, "None yet: one is made the first time you save each day.", 12, Theme.Muted, TextAnchor.MiddleLeft); Ui.Place(none.rectTransform, new Vector2(0, 1), new Vector2(1, 1), new Vector2(0, -y - 24), new Vector2(0, -y)); _dynamic.Add(none.gameObject); y += 30; }
             foreach (var day in backups)
             {
                 string d = day;
@@ -225,6 +252,38 @@ namespace TradingEmpire.Terminal
             note.horizontalOverflow = HorizontalWrapMode.Wrap;
             Ui.Place(note.rectTransform, new Vector2(0, 1), new Vector2(1, 1), new Vector2(210, -y - 34), new Vector2(0, -y));
             _dynamic.Add(note.gameObject);
+            y += 54;
+            GodSection(ref y);
+        }
+
+        // ---- God mode: testing tools, through the real ledgers (as on the web)
+
+        void GodSection(ref float y)
+        {
+            _god = PlayerPrefs.GetInt("te.god", 0) == 1;
+            var toggle = AddButton((_god ? "[x]" : "[ ]") + "  God mode (testing tools)", () => { PlayerPrefs.SetInt("te.god", _god ? 0 : 1); _dirty = true; }, 0, y, 280, 30, _god ? Theme.Primary : (Color?)null);
+            y += 38;
+            if (!_god) return;
+            var note = Ui.Label(_content, "For testing. Money is added through the real ledgers, so saves stay valid, but progress made this way is not earned.", 11, Theme.Muted, TextAnchor.UpperLeft);
+            note.horizontalOverflow = HorizontalWrapMode.Wrap;
+            Ui.Place(note.rectTransform, new Vector2(0, 1), new Vector2(1, 1), new Vector2(0, -y - 32), new Vector2(0, -y));
+            _dynamic.Add(note.gameObject);
+            y += 38;
+            long[] amounts = { 10000, 100000, 1000000 };
+            Func<long, string> label = n => n >= 1000000 ? "$" + n / 1000000 + "M" : "$" + n / 1000 + "k";
+            var lab1 = Ui.Label(_content, "City treasury", 12, Theme.Ink, TextAnchor.MiddleLeft); Ui.Place(lab1.rectTransform, new Vector2(0, 1), new Vector2(0, 1), new Vector2(0, -y - 28), new Vector2(130, -y)); _dynamic.Add(lab1.gameObject);
+            for (int i = 0; i < amounts.Length; i++) { long n = amounts[i]; AddButton("+" + label(n), () => { World.City.GrantFunds(Money.FromDollars(n)); Report("Added " + label(n) + " to the city treasury."); }, 140 + i * 84, y, 78, 28); }
+            y += 36;
+            var lab2 = Ui.Label(_content, "Trading account", 12, Theme.Ink, TextAnchor.MiddleLeft); Ui.Place(lab2.rectTransform, new Vector2(0, 1), new Vector2(0, 1), new Vector2(0, -y - 28), new Vector2(130, -y)); _dynamic.Add(lab2.gameObject);
+            for (int i = 0; i < amounts.Length; i++) { long n = amounts[i]; AddButton("+" + label(n), () => { World.Trading.GrantFunds(Money.FromDollars(n)); Report("Added " + label(n) + " to the trading account."); }, 140 + i * 84, y, 78, 28); }
+            y += 36;
+            var lab3 = Ui.Label(_content, "Time", 12, Theme.Ink, TextAnchor.MiddleLeft); Ui.Place(lab3.rectTransform, new Vector2(0, 1), new Vector2(0, 1), new Vector2(0, -y - 28), new Vector2(130, -y)); _dynamic.Add(lab3.gameObject);
+            int[] days = { 1, 7, 30, 90 };
+            for (int i = 0; i < days.Length; i++) { int d = days[i]; AddButton("+" + d + "d", () => { World.Clock.SkipDays(d); Report("Skipped " + d + " days."); }, 140 + i * 84, y, 78, 28); }
+            y += 36;
+            var lab4 = Ui.Label(_content, "Unlocks", 12, Theme.Ink, TextAnchor.MiddleLeft); Ui.Place(lab4.rectTransform, new Vector2(0, 1), new Vector2(0, 1), new Vector2(0, -y - 28), new Vector2(130, -y)); _dynamic.Add(lab4.gameObject);
+            AddButton("Unlock all buildings and land", () => { World.City.UnlockEverything(); Report("Everything is unlocked."); }, 140, y, 260, 28);
+            y += 36;
         }
 
         void MissionsTab()
