@@ -21,6 +21,17 @@ namespace TradingEmpire.Terminal
         public static Color Bear { get { return ColorBlind ? new Color(0.98f, 0.66f, 0.18f) : new Color(0.93f, 0.32f, 0.36f); } }
         public static readonly Color Grid = new Color(1f, 1f, 1f, 0.06f);
 
+        // Light city-overlay palette (the browser game's cards over the sky-blue city).
+        public static readonly Color Card = new Color(1f, 1f, 1f, 0.93f);
+        public static readonly Color Ink = new Color(0.110f, 0.165f, 0.200f);
+        public static readonly Color Muted = new Color(0.361f, 0.420f, 0.459f);
+        public static readonly Color Line = new Color(0.835f, 0.867f, 0.890f);
+        public static readonly Color Primary = new Color(0.184f, 0.490f, 0.882f);
+        public static readonly Color Tint = new Color(0.906f, 0.941f, 0.992f);
+        public static readonly Color Good = new Color(0.086f, 0.478f, 0.263f);
+        public static readonly Color Bad = new Color(0.702f, 0.149f, 0.118f);
+        public static readonly Color Warn = new Color(0.62f, 0.42f, 0.02f);
+
         static Font _font, _mono;
         public static Font Font
         {
@@ -48,6 +59,56 @@ namespace TradingEmpire.Terminal
         {
             if (o == null) return;
             if (Application.isPlaying) UnityEngine.Object.Destroy(o); else UnityEngine.Object.DestroyImmediate(o);
+        }
+
+        static Sprite _round;
+        /// <summary>A white rounded-rectangle sprite (9-sliced) so panels and buttons get soft corners like the web UI.</summary>
+        public static Sprite Round
+        {
+            get
+            {
+                if (_round != null) return _round;
+                const int n = 32, r = 12;
+                var tex = new Texture2D(n, n, TextureFormat.RGBA32, false) { filterMode = FilterMode.Bilinear, wrapMode = TextureWrapMode.Clamp, hideFlags = HideFlags.HideAndDontSave };
+                for (int y = 0; y < n; y++)
+                    for (int x = 0; x < n; x++)
+                    {
+                        float dx = Mathf.Max(r - 0.5f - x, x - (n - r - 0.5f), 0f), dy = Mathf.Max(r - 0.5f - y, y - (n - r - 0.5f), 0f);
+                        float a = Mathf.Clamp01(r - Mathf.Sqrt(dx * dx + dy * dy) + 0.5f);
+                        tex.SetPixel(x, y, new Color(1, 1, 1, a));
+                    }
+                tex.Apply();
+                _round = Sprite.Create(tex, new Rect(0, 0, n, n), new Vector2(0.5f, 0.5f), 100f, 0, SpriteMeshType.FullRect, new Vector4(r, r, r, r));
+                _round.hideFlags = HideFlags.HideAndDontSave;
+                return _round;
+            }
+        }
+
+        /// <summary>Give an image rounded corners; <paramref name="radius"/> is in canvas pixels.</summary>
+        public static Image Rounded(Image img, float radius = 8f)
+        {
+            img.sprite = Round; img.type = Image.Type.Sliced; img.pixelsPerUnitMultiplier = 12f / radius;
+            return img;
+        }
+
+        /// <summary>A light rounded card with a soft drop shadow that blocks the mouse.</summary>
+        public static Image Card(Transform parent, string name, float radius = 10f, Color? color = null)
+        {
+            var img = Panel(parent, name, color ?? Theme.Card);
+            Rounded(img, radius);
+            var sh = img.gameObject.AddComponent<Shadow>();
+            sh.effectColor = new Color(0, 0, 0, 0.16f); sh.effectDistance = new Vector2(0, -2);
+            return img;
+        }
+
+        /// <summary>A light pill/rounded button (white, or the blue primary).</summary>
+        public static Button Pill(Transform parent, string label, Action onClick, bool primary = false, int size = 13)
+        {
+            var b = Button(parent, label, onClick, primary ? Theme.Primary : Color.white, size, primary ? Color.white : Theme.Ink);
+            Rounded((Image)b.targetGraphic, 9f);
+            var sh = b.gameObject.AddComponent<Shadow>();
+            sh.effectColor = new Color(0, 0, 0, 0.14f); sh.effectDistance = new Vector2(0, -1.5f);
+            return b;
         }
 
         public static RectTransform Rect(Transform parent, string name)
@@ -110,6 +171,7 @@ namespace TradingEmpire.Terminal
             var img = rt.gameObject.AddComponent<Image>();
             Color c = fill ?? Theme.PanelAlt;
             img.color = c;
+            Rounded(img, 6f);
             var b = rt.gameObject.AddComponent<Button>();
             var colors = b.colors;
             colors.normalColor = Color.white;

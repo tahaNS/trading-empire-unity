@@ -62,41 +62,63 @@ namespace TradingEmpire.Terminal
 
         // ---------------------------------------------------------------- layout
 
+        static readonly Color Segment = new Color(0.925f, 0.941f, 0.953f);
+
+        static void Style(Button b, Color fill, Color text)
+        {
+            Ui.SetButtonColor(b, fill);
+            b.transform.Find("Label").GetComponent<Text>().color = text;
+        }
+
+        static Text Caption(Transform parent, string text, float x, float w, float top, float height, int size, Color color, bool bold = false, bool mono = false)
+        {
+            var t = Ui.Label(parent, text, size, color, TextAnchor.MiddleLeft, mono, bold);
+            Ui.Place(t.rectTransform, new Vector2(0, 1), new Vector2(0, 1), new Vector2(x, -top - height), new Vector2(x + w, -top));
+            return t;
+        }
+
         void BuildUi(RectTransform root)
         {
-            // top bar
-            var bar = Ui.Rect(root, "TopBar");
-            Ui.Place(bar, new Vector2(0, 1), Vector2.one, new Vector2(8, -64), new Vector2(-8, -8));
-            Ui.Panel(bar, "Bg", new Color(Theme.Panel.r, Theme.Panel.g, Theme.Panel.b, 0.96f)).rectTransform.SetAsFirstSibling();
-            Ui.Stretch((RectTransform)bar.Find("Bg"));
+            // top-left cards: treasury, net income, date and speed
+            var treasury = Ui.Card(root, "TreasuryCard");
+            Ui.Place(treasury.rectTransform, new Vector2(0, 1), new Vector2(0, 1), new Vector2(12, -84), new Vector2(212, -12));
+            Caption(treasury.transform, "TREASURY", 14, 170, 8, 18, 11, Theme.Muted, true);
+            _treasury = Caption(treasury.transform, "", 14, 180, 28, 34, 22, Theme.Ink, true, true);
 
-            _date = Ui.Label(bar, "", 14, Theme.Text, TextAnchor.MiddleLeft, false, true);
-            Ui.Place(_date.rectTransform, Vector2.zero, new Vector2(0, 1), new Vector2(14, 0), new Vector2(190, 0));
-            float x = 196;
+            var net = Ui.Card(root, "NetCard");
+            Ui.Place(net.rectTransform, new Vector2(0, 1), new Vector2(0, 1), new Vector2(220, -84), new Vector2(450, -12));
+            Caption(net.transform, "NET INCOME / 30 DAYS", 14, 210, 8, 18, 11, Theme.Muted, true);
+            _net = Caption(net.transform, "", 14, 210, 26, 26, 19, Theme.Good, true, true);
+            _chips = Caption(net.transform, "", 14, 210, 50, 18, 11, Theme.Good, true);
+
+            var date = Ui.Card(root, "DateCard");
+            Ui.Place(date.rectTransform, new Vector2(0, 1), new Vector2(0, 1), new Vector2(458, -84), new Vector2(908, -12));
+            Caption(date.transform, "DATE", 14, 120, 8, 18, 11, Theme.Muted, true);
+            _date = Caption(date.transform, "", 14, 130, 30, 30, 16, Theme.Ink, true);
+            var seg = Ui.Box(date.transform, "Segments", Segment);
+            Ui.Rounded(seg, 8f);
+            Ui.Place(seg.rectTransform, new Vector2(0, 0), new Vector2(1, 1), new Vector2(166, 14), new Vector2(-12, -14));
             int[] speeds = GameClock.Speeds;
-            string[] names = { "II", "1x", "2x", "5x", "10x" };
+            string[] names = { "Pause", "1x", "2x", "5x", "10x" };
             for (int i = 0; i < speeds.Length; i++)
             {
                 int sp = speeds[i];
-                var b = Ui.Button(bar, names[i], () => _world.Clock.SetSpeed(sp), Theme.PanelAlt, 12);
-                Ui.Place((RectTransform)b.transform, Vector2.zero, new Vector2(0, 1), new Vector2(x, 10), new Vector2(x + 42, -10));
-                _speedButtons.Add(b);
-                x += 46;
+                var btn = Ui.Button(seg.transform, names[i], () => _world.Clock.SetSpeed(sp), Color.clear, 12, Theme.Ink);
+                float w = 1f / speeds.Length;
+                Ui.Place((RectTransform)btn.transform, new Vector2(w * i, 0), new Vector2(w * (i + 1), 1), new Vector2(3, 3), new Vector2(-3, -3));
+                _speedButtons.Add(btn);
             }
 
-            _treasury = Ui.Label(bar, "", 22, Theme.Text, TextAnchor.MiddleLeft, true, true);
-            Ui.Place(_treasury.rectTransform, Vector2.zero, new Vector2(0, 1), new Vector2(x + 24, 6), new Vector2(x + 250, -4));
-            _net = Ui.Label(bar, "", 12, Theme.Dim, TextAnchor.MiddleLeft, true);
-            Ui.Place(_net.rectTransform, Vector2.zero, new Vector2(0, 1), new Vector2(x + 250, 0), new Vector2(x + 520, 0));
-            _chips = Ui.Label(bar, "", 12, Theme.Accent, TextAnchor.MiddleLeft, false, true);
-            Ui.Place(_chips.rectTransform, Vector2.zero, new Vector2(0, 1), new Vector2(x + 520, 0), new Vector2(x + 760, 0));
-
-            float rx = -10;
-            if (_openMenu != null) AddRight(bar, "Menu", ref rx, 70, () => _openMenu());
-            AddRight(bar, "Terminal", ref rx, 96, () => _openTerminal());
-            AddRight(bar, "Transfer", ref rx, 90, () => Toggle(_transferPanel, _policyPanel));
-            AddRight(bar, "Policies", ref rx, 86, () => Toggle(_policyPanel, _transferPanel));
-            _landButton = AddRight(bar, "Buy land", ref rx, 190, () => City.ExpandLand());
+            // top-right pills
+            var row = Ui.Rect(root, "Pills");
+            Ui.Place(row, new Vector2(0, 1), new Vector2(1, 1), new Vector2(920, -52), new Vector2(-12, -12));
+            float rx = 0;
+            AddRight(row, "Open Terminal", ref rx, 140, () => _openTerminal(), true);
+            if (_openMenu != null) AddRight(row, "Game", ref rx, 64, () => _openMenu());
+            AddRight(row, "Policies", ref rx, 84, () => Toggle(_policyPanel, _transferPanel));
+            if (_openMenu != null) AddRight(row, "Progress", ref rx, 84, () => _openMenu());
+            AddRight(row, "Finances", ref rx, 84, () => Toggle(_transferPanel, _policyPanel));
+            _landButton = AddRight(row, "Buy land", ref rx, 176, () => City.ExpandLand());
 
             BuildBuildBar(root);
             BuildInspector(root);
@@ -105,17 +127,17 @@ namespace TradingEmpire.Terminal
 
             _floaterLayer = Ui.Rect(root, "Floaters");
             Ui.Stretch(_floaterLayer);
-            var toastBg = Ui.Box(root, "Toast", new Color(0.1f, 0.14f, 0.2f, 0.96f));
-            Ui.Place(toastBg.rectTransform, new Vector2(0.5f, 0), new Vector2(0.5f, 0), new Vector2(-330, 100), new Vector2(330, 140));
-            _toast = Ui.Label(toastBg.transform, "", 14, Theme.Text, TextAnchor.MiddleCenter);
+            var toastBg = Ui.Card(root, "Toast", 10f, Color.white);
+            Ui.Place(toastBg.rectTransform, new Vector2(0.5f, 0), new Vector2(0.5f, 0), new Vector2(-330, 108), new Vector2(330, 148));
+            _toast = Ui.Label(toastBg.transform, "", 14, Theme.Ink, TextAnchor.MiddleCenter);
             toastBg.gameObject.SetActive(false);
         }
 
-        Button AddRight(RectTransform bar, string label, ref float rx, float w, Action act)
+        Button AddRight(RectTransform bar, string label, ref float rx, float w, Action act, bool primary = false)
         {
-            var b = Ui.Button(bar, label, act, Theme.PanelAlt, 12);
-            Ui.Place((RectTransform)b.transform, new Vector2(1, 0), Vector2.one, new Vector2(rx - w, 10), new Vector2(rx, -10));
-            rx -= w + 6;
+            var b = Ui.Pill(bar, label, act, primary, 13);
+            Ui.Place((RectTransform)b.transform, new Vector2(1, 0), Vector2.one, new Vector2(rx - w, 0), new Vector2(rx, 0));
+            rx -= w + 8;
             return b;
         }
 
@@ -128,61 +150,71 @@ namespace TradingEmpire.Terminal
 
         void BuildBuildBar(RectTransform root)
         {
-            var bar = Ui.Rect(root, "BuildBar");
-            Ui.Place(bar, Vector2.zero, new Vector2(1, 0), new Vector2(8, 8), new Vector2(-8, 88));
-            Ui.Panel(bar, "Bg", new Color(Theme.Panel.r, Theme.Panel.g, Theme.Panel.b, 0.96f)).rectTransform.SetAsFirstSibling();
-            Ui.Stretch((RectTransform)bar.Find("Bg"));
-            var hint = Ui.Label(bar, "BUILD   (click a building, then the map. R rotates, Esc cancels)", 11, Theme.Dim, TextAnchor.MiddleLeft, false, true);
-            Ui.Place(hint.rectTransform, new Vector2(0, 1), Vector2.one, new Vector2(10, -20), new Vector2(-10, -2));
+            var bar = Ui.Card(root, "BuildBar", 12f);
+            Ui.Place(bar.rectTransform, Vector2.zero, new Vector2(1, 0), new Vector2(12, 12), new Vector2(-12, 96));
+            var hint = Ui.Label(bar.transform, "BUILD   click a building, then the map.  R rotates, Esc cancels", 11, Theme.Muted, TextAnchor.MiddleLeft, false, true);
+            Ui.Place(hint.rectTransform, new Vector2(0, 1), Vector2.one, new Vector2(12, -22), new Vector2(-12, -3));
             int n = Buildings.All.Count;
             for (int i = 0; i < n; i++)
             {
                 var def = Buildings.All[i];
                 string id = def.Id;
-                var b = Ui.Button(bar, def.Name + "\n" + def.Cost, () => City.StartPlacement(id), Theme.PanelAlt, 11);
+                var b = Ui.Button(bar.transform, def.Name + "\n" + def.Cost, () => City.StartPlacement(id), Color.white, 11, Theme.Ink);
+                var ol = b.gameObject.AddComponent<Outline>();
+                ol.effectColor = Theme.Line; ol.effectDistance = new Vector2(1.5f, 1.5f);
                 float w = 1f / n;
-                Ui.Place((RectTransform)b.transform, new Vector2(w * i, 0), new Vector2(w * (i + 1), 1), new Vector2(6, 6), new Vector2(-2, -22));
+                Ui.Place((RectTransform)b.transform, new Vector2(w * i, 0), new Vector2(w * (i + 1), 1), new Vector2(8, 8), new Vector2(-2, -26));
                 _buildButtons[id] = b;
             }
         }
 
         void BuildInspector(RectTransform root)
         {
-            _inspector = Ui.Rect(root, "Inspector");
-            Ui.Place(_inspector, new Vector2(1, 0), new Vector2(1, 1), new Vector2(-330, 100), new Vector2(-8, -72));
-            Ui.Panel(_inspector, "Bg", new Color(Theme.Panel.r, Theme.Panel.g, Theme.Panel.b, 0.97f)).rectTransform.SetAsFirstSibling();
-            Ui.Stretch((RectTransform)_inspector.Find("Bg"));
-            _inspectorTitle = Ui.Label(_inspector, "", 16, Theme.Text, TextAnchor.MiddleLeft, false, true);
-            Ui.Place(_inspectorTitle.rectTransform, new Vector2(0, 1), Vector2.one, new Vector2(12, -36), new Vector2(-12, -6));
-            _inspectorBody = Ui.Label(_inspector, "", 12, Theme.Text, TextAnchor.UpperLeft, true);
+            _inspector = Ui.Card(root, "Inspector", 12f).rectTransform;
+            Ui.Place(_inspector, new Vector2(1, 0), new Vector2(1, 1), new Vector2(-340, 108), new Vector2(-12, -64));
+            _inspectorTitle = Ui.Label(_inspector, "", 17, Theme.Ink, TextAnchor.MiddleLeft, false, true);
+            Ui.Place(_inspectorTitle.rectTransform, new Vector2(0, 1), Vector2.one, new Vector2(16, -40), new Vector2(-16, -8));
+            _inspectorBody = Ui.Label(_inspector, "", 12, Theme.Ink, TextAnchor.UpperLeft, true);
             _inspectorBody.horizontalOverflow = HorizontalWrapMode.Wrap;
-            Ui.Place(_inspectorBody.rectTransform, Vector2.zero, Vector2.one, new Vector2(12, 90), new Vector2(-12, -42));
-            _upgrade = Ui.Button(_inspector, "Upgrade", () => { if (_inspectedId != null) City.Upgrade(_inspectedId); }, new Color(0.1f, 0.5f, 0.4f), 13);
-            Ui.Place((RectTransform)_upgrade.transform, Vector2.zero, new Vector2(1, 0), new Vector2(12, 48), new Vector2(-12, 82));
-            _demolish = Ui.Button(_inspector, "Demolish", () => { if (_inspectedId != null) City.Demolish(_inspectedId); }, new Color(0.55f, 0.2f, 0.22f), 13);
-            Ui.Place((RectTransform)_demolish.transform, Vector2.zero, new Vector2(1, 0), new Vector2(12, 10), new Vector2(-12, 44));
+            Ui.Place(_inspectorBody.rectTransform, Vector2.zero, Vector2.one, new Vector2(16, 98), new Vector2(-16, -46));
+            _upgrade = Ui.Pill(_inspector, "Upgrade", () => { if (_inspectedId != null) City.Upgrade(_inspectedId); }, true, 13);
+            Ui.Place((RectTransform)_upgrade.transform, Vector2.zero, new Vector2(1, 0), new Vector2(16, 56), new Vector2(-16, 90));
+            _demolish = Ui.Pill(_inspector, "Demolish", () => { if (_inspectedId != null) City.Demolish(_inspectedId); }, false, 13);
+            Ui.Place((RectTransform)_demolish.transform, Vector2.zero, new Vector2(1, 0), new Vector2(16, 14), new Vector2(-16, 48));
+            Style(_demolish, Color.white, Theme.Bad);
             _inspector.gameObject.SetActive(false);
+        }
+
+        void PanelHeader(RectTransform panel, string title)
+        {
+            var h = Ui.Label(panel, title, 17, Theme.Ink, TextAnchor.MiddleLeft, false, true);
+            Ui.Place(h.rectTransform, new Vector2(0, 1), Vector2.one, new Vector2(16, -44), new Vector2(-56, -8));
+            var close = Ui.Pill(panel, "x", () => panel.gameObject.SetActive(false), false, 13);
+            Ui.Place((RectTransform)close.transform, new Vector2(1, 1), new Vector2(1, 1), new Vector2(-44, -42), new Vector2(-12, -12));
         }
 
         void BuildTransferPanel(RectTransform root)
         {
-            _transferPanel = Ui.Rect(root, "TransferPanel");
-            Ui.Place(_transferPanel, new Vector2(0, 1), new Vector2(0, 1), new Vector2(8, -330), new Vector2(470, -72));
-            Ui.Panel(_transferPanel, "Bg", new Color(0.09f, 0.12f, 0.17f, 0.99f)).rectTransform.SetAsFirstSibling();
-            Ui.Stretch((RectTransform)_transferPanel.Find("Bg"));
-            var h = Ui.Label(_transferPanel, "CAPITAL TRANSFER", 12, Theme.Accent, TextAnchor.MiddleLeft, false, true);
-            Ui.Place(h.rectTransform, new Vector2(0, 1), Vector2.one, new Vector2(12, -26), new Vector2(-12, -4));
-            _transferInfo = Ui.Label(_transferPanel, "", 12, Theme.Text, TextAnchor.UpperLeft, true);
-            Ui.Place(_transferInfo.rectTransform, new Vector2(0, 1), Vector2.one, new Vector2(12, -112), new Vector2(-12, -30));
+            _transferPanel = Ui.Card(root, "TransferPanel", 12f).rectTransform;
+            Ui.Place(_transferPanel, new Vector2(0, 1), new Vector2(0, 1), new Vector2(12, -392), new Vector2(412, -96));
+            PanelHeader(_transferPanel, "Finances");
+            var sub = Ui.Label(_transferPanel, "CAPITAL TRANSFER", 11, Theme.Muted, TextAnchor.MiddleLeft, false, true);
+            Ui.Place(sub.rectTransform, new Vector2(0, 1), Vector2.one, new Vector2(16, -70), new Vector2(-16, -50));
+            _transferInfo = Ui.Label(_transferPanel, "", 12, Theme.Ink, TextAnchor.UpperLeft, true);
+            Ui.Place(_transferInfo.rectTransform, new Vector2(0, 1), Vector2.one, new Vector2(16, -158), new Vector2(-16, -74));
             _amount = Ui.Input(_transferPanel, "1000", 14, InputField.ContentType.DecimalNumber);
-            Ui.Place((RectTransform)_amount.transform, new Vector2(0, 1), Vector2.one, new Vector2(12, -150), new Vector2(-12, -118));
-            var toCity = Ui.Button(_transferPanel, "To city  >", () => DoTransfer(true), new Color(0.1f, 0.5f, 0.4f), 13);
-            Ui.Place((RectTransform)toCity.transform, new Vector2(0, 1), new Vector2(0.5f, 1), new Vector2(12, -190), new Vector2(-4, -158));
-            var toTrading = Ui.Button(_transferPanel, "<  To trading", () => DoTransfer(false), Theme.Blue, 13);
-            Ui.Place((RectTransform)toTrading.transform, new Vector2(0.5f, 1), Vector2.one, new Vector2(4, -190), new Vector2(-12, -158));
-            _transferMessage = Ui.Label(_transferPanel, "", 11, Theme.Dim, TextAnchor.UpperLeft);
+            var amountBg = (Image)_amount.targetGraphic;
+            amountBg.color = new Color(0.94f, 0.955f, 0.965f);
+            _amount.textComponent.color = Theme.Ink;
+            Ui.Place((RectTransform)_amount.transform, new Vector2(0, 1), Vector2.one, new Vector2(16, -198), new Vector2(-16, -166));
+            var toCity = Ui.Pill(_transferPanel, "To city  >", () => DoTransfer(true), true, 13);
+            Ui.Place((RectTransform)toCity.transform, new Vector2(0, 1), new Vector2(0.5f, 1), new Vector2(16, -240), new Vector2(-4, -206));
+            Style(toCity, Theme.Good, Color.white);
+            var toTrading = Ui.Pill(_transferPanel, "<  To trading", () => DoTransfer(false), true, 13);
+            Ui.Place((RectTransform)toTrading.transform, new Vector2(0.5f, 1), Vector2.one, new Vector2(4, -240), new Vector2(-16, -206));
+            _transferMessage = Ui.Label(_transferPanel, "", 11, Theme.Muted, TextAnchor.UpperLeft);
             _transferMessage.horizontalOverflow = HorizontalWrapMode.Wrap;
-            Ui.Place(_transferMessage.rectTransform, Vector2.zero, Vector2.one, new Vector2(12, 6), new Vector2(-12, -196));
+            Ui.Place(_transferMessage.rectTransform, Vector2.zero, Vector2.one, new Vector2(16, 8), new Vector2(-16, -248));
             _transferPanel.gameObject.SetActive(false);
         }
 
@@ -194,31 +226,32 @@ namespace TradingEmpire.Terminal
             string request = Guid.NewGuid().ToString();
             var r = toCity ? _world.Transfers.Transfer(request, amount) : _world.Transfers.TransferToTrading(request, amount);
             _transferMessage.text = r.Ok ? "Moved " + amount + (toCity ? " to the city treasury." : " to the trading account.") : r.Message;
-            _transferMessage.color = r.Ok ? new Color(0.55f, 1f, 0.8f) : new Color(1f, 0.6f, 0.6f);
+            _transferMessage.color = r.Ok ? Theme.Good : Theme.Bad;
             _dirty = true;
         }
 
         void BuildPolicyPanel(RectTransform root)
         {
-            _policyPanel = Ui.Rect(root, "PolicyPanel");
-            float h = 44 + Modifiers.Policies.Count * 84;
-            Ui.Place(_policyPanel, new Vector2(0, 1), new Vector2(0, 1), new Vector2(8, -72 - h), new Vector2(470, -72));
-            Ui.Panel(_policyPanel, "Bg", new Color(0.09f, 0.12f, 0.17f, 0.99f)).rectTransform.SetAsFirstSibling();
-            Ui.Stretch((RectTransform)_policyPanel.Find("Bg"));
-            var head = Ui.Label(_policyPanel, "POLICIES", 12, Theme.Accent, TextAnchor.MiddleLeft, false, true);
-            Ui.Place(head.rectTransform, new Vector2(0, 1), Vector2.one, new Vector2(12, -26), new Vector2(-12, -4));
+            const float Row = 96f;
+            float h = 60 + Modifiers.Policies.Count * Row;
+            _policyPanel = Ui.Card(root, "PolicyPanel", 12f).rectTransform;
+            Ui.Place(_policyPanel, new Vector2(0, 1), new Vector2(0, 1), new Vector2(12, -96 - h), new Vector2(412, -96));
+            PanelHeader(_policyPanel, "City policies");
             for (int i = 0; i < Modifiers.Policies.Count; i++)
             {
                 var p = Modifiers.Policies[i];
-                float top = -34 - i * 84;
-                var title = Ui.Label(_policyPanel, p.Name, 13, Theme.Text, TextAnchor.MiddleLeft, false, true);
-                Ui.Place(title.rectTransform, new Vector2(0, 1), Vector2.one, new Vector2(12, top - 22), new Vector2(-100, top));
-                var desc = Ui.Label(_policyPanel, p.Description, 11, Theme.Dim, TextAnchor.UpperLeft);
+                float top = -56 - i * Row;
+                var card = Ui.Box(_policyPanel, "Policy " + p.Id, new Color(0.965f, 0.973f, 0.98f));
+                Ui.Rounded(card, 8f);
+                Ui.Place(card.rectTransform, new Vector2(0, 1), Vector2.one, new Vector2(12, top - Row + 6), new Vector2(-12, top));
+                var title = Ui.Label(card.transform, p.Name, 13, Theme.Ink, TextAnchor.MiddleLeft, false, true);
+                Ui.Place(title.rectTransform, new Vector2(0, 1), Vector2.one, new Vector2(12, -30), new Vector2(-96, -6));
+                var desc = Ui.Label(card.transform, p.Description, 11, Theme.Muted, TextAnchor.UpperLeft);
                 desc.horizontalOverflow = HorizontalWrapMode.Wrap;
-                Ui.Place(desc.rectTransform, new Vector2(0, 1), Vector2.one, new Vector2(12, top - 76), new Vector2(-100, top - 24));
+                Ui.Place(desc.rectTransform, Vector2.zero, Vector2.one, new Vector2(12, 4), new Vector2(-12, -32));
                 string id = p.Id;
-                var b = Ui.Button(_policyPanel, "OFF", () => City.SetPolicy(id, !City.State.Policies.Contains(id)), Theme.PanelAlt, 12);
-                Ui.Place((RectTransform)b.transform, new Vector2(1, 1), new Vector2(1, 1), new Vector2(-88, top - 30), new Vector2(-12, top - 2));
+                var b = Ui.Pill(card.transform, "OFF", () => City.SetPolicy(id, !City.State.Policies.Contains(id)), false, 12);
+                Ui.Place((RectTransform)b.transform, new Vector2(1, 1), new Vector2(1, 1), new Vector2(-88, -30), new Vector2(-10, -6));
                 _policyButtons[id] = b;
                 _policyTexts[id] = desc;
             }
@@ -274,28 +307,28 @@ namespace TradingEmpire.Terminal
         {
             var s = City.State;
             _date.text = DateTimeOffset.FromUnixTimeMilliseconds(_world.Clock.Time).UtcDateTime.ToString("ddd d MMM yyyy", CultureInfo.InvariantCulture).ToUpperInvariant();
-            for (int i = 0; i < _speedButtons.Count; i++) Ui.SetButtonColor(_speedButtons[i], GameClock.Speeds[i] == _world.Clock.Speed ? Theme.Blue : Theme.PanelAlt);
+            for (int i = 0; i < _speedButtons.Count; i++) { bool on = GameClock.Speeds[i] == _world.Clock.Speed; Style(_speedButtons[i], on ? Theme.Primary : Color.clear, on ? Color.white : Theme.Ink); }
 
             _treasury.text = s.Balance.ToString();
-            _treasury.color = s.Balance.Cents < 0 ? Theme.Bear : Theme.Text;
+            _treasury.color = s.Balance.Cents < 0 ? Theme.Bad : Theme.Ink;
             var proj = CityEconomy.ProjectedNetPer30Days(s.Buildings, false, City.Context());
-            _net.text = "net " + Signed(proj) + " / 30 days";
-            _net.color = proj.Cents >= 0 ? Theme.Bull : Theme.Bear;
+            _net.text = Signed(proj);
+            _net.color = proj.Cents >= 0 ? Theme.Good : Theme.Bad;
 
             var chips = new List<string>();
-            if (s.Mood == Mood.Booming) chips.Add("<color=#26c295>BOOM</color>");
-            if (s.Mood == Mood.Panic) chips.Add("<color=#ed5259>PANIC</color>");
+            if (s.Mood == Mood.Booming) chips.Add("<color=#167a43>BOOM</color>");
+            if (s.Mood == Mood.Panic) chips.Add("<color=#b3261e>PANIC</color>");
             foreach (var e in s.Events)
             {
                 int days = (int)Math.Ceiling((e.EndsAt - _world.Clock.Time) / (double)GameClock.DayMs);
                 var def = EventConfig.Get(e.Kind);
-                chips.Add((e.Kind == EventKind.Fire ? "<color=#ed5259>" : e.Kind == EventKind.Storm ? "<color=#f5bf3d>" : "<color=#26c295>") + def.Name.ToUpperInvariant() + " " + Math.Max(days, 0) + "d</color>");
+                chips.Add((e.Kind == EventKind.Fire ? "<color=#b3261e>" : e.Kind == EventKind.Storm ? "<color=#9e6b05>" : "<color=#167a43>") + def.Name.ToUpperInvariant() + " " + Math.Max(days, 0) + "d</color>");
             }
             _chips.text = string.Join("   ", chips);
 
             var tier = City.NextLandTier();
             _landButton.gameObject.SetActive(tier != null);
-            if (tier != null) Ui.SetButtonLabel(_landButton, "Buy " + tier.Name.Replace(" District", "") + "  " + tier.Cost);
+            if (tier != null) Ui.SetButtonLabel(_landButton, "Buy " + tier.Name.Replace(" District", "") + "  " + tier.Cost.ToString().Replace(".00", ""));
 
             foreach (var def in Buildings.All)
             {
@@ -303,8 +336,9 @@ namespace TradingEmpire.Terminal
                 bool locked = !City.IsUnlocked(def.UnlockId);
                 bool afford = s.Balance >= def.Cost;
                 bool active = s.Placement != null && s.Placement.DefId == def.Id;
-                Ui.SetButtonLabel(b, (locked ? "[locked] " : "") + def.Name + "\n" + def.Cost);
-                Ui.SetButtonColor(b, active ? Theme.Blue : locked ? new Color(0.12f, 0.14f, 0.18f) : afford ? Theme.PanelAlt : new Color(0.2f, 0.12f, 0.14f));
+                Ui.SetButtonLabel(b, (locked ? "[locked] " : "") + def.Name + "\n<color=" + (afford || locked ? "#5c6b75" : "#b3261e") + ">" + def.Cost + "</color>");
+                Style(b, active ? Theme.Tint : locked ? Segment : Color.white, locked ? Theme.Muted : Theme.Ink);
+                b.GetComponent<Outline>().effectColor = active ? Theme.Primary : Theme.Line;
             }
 
             if (s.Payouts != null && s.Payouts.Seq != _lastPayoutSeq) { _lastPayoutSeq = s.Payouts.Seq; SpawnFloaters(s.Payouts); }
@@ -316,7 +350,7 @@ namespace TradingEmpire.Terminal
             {
                 _lastToast = s.Notice.Seq;
                 _toast.text = s.Notice.Text;
-                _toast.color = s.Notice.Kind == NoticeKind.Error ? new Color(1f, 0.6f, 0.6f) : s.Notice.Kind == NoticeKind.Success ? new Color(0.55f, 1f, 0.8f) : Theme.Text;
+                _toast.color = s.Notice.Kind == NoticeKind.Error ? Theme.Bad : s.Notice.Kind == NoticeKind.Success ? Theme.Good : Theme.Ink;
                 _toast.transform.parent.gameObject.SetActive(true);
                 _toastUntil = Time.unscaledTime + 4.5f;
             }
@@ -332,7 +366,7 @@ namespace TradingEmpire.Terminal
             int level = Landmarks.EffectiveLevel(b.Level, def, s.Record);
             _inspectorTitle.text = def.Levels[level - 1].Name;
             var lines = new List<string>();
-            lines.Add("<color=#8594ad>" + def.Description + "</color>");
+            lines.Add("<color=#5c6b75>" + def.Description + "</color>");
             lines.Add("");
             if (b.Status == BuildStatus.Building)
             {
@@ -347,7 +381,7 @@ namespace TradingEmpire.Terminal
                 lines.Add("Income   " + lvl.Income + "  per " + def.IncomeIntervalDays + " days");
                 lines.Add("Upkeep   " + lvl.Expense);
                 lines.Add("Net / 30 days   " + Signed(CityEconomy.NetPer30Days(b, mods)));
-                if (mods.Closed) lines.Add("<color=#ed5259>Closed for repairs after a fire</color>");
+                if (mods.Closed) lines.Add("<color=#b3261e>Closed for repairs after a fire</color>");
                 if (mods.Park > 0) lines.Add("+" + mods.Park.ToString("0.#", CultureInfo.InvariantCulture) + "% nearby recreation");
                 foreach (var sy in mods.Synergies) lines.Add("+" + sy.Pct + "% " + sy.Label);
                 if (mods.Mood != 0) lines.Add((mods.Mood > 0 ? "+" : "") + mods.Mood + "% market mood");
@@ -360,7 +394,7 @@ namespace TradingEmpire.Terminal
                 {
                     lines.Add("");
                     lines.Add("Next: " + next.Value.name);
-                    foreach (var l in next.Value.lines) lines.Add((l.Met ? "<color=#26c295>[x]</color> " : "[ ] ") + l.Label);
+                    foreach (var l in next.Value.lines) lines.Add((l.Met ? "<color=#167a43>[x]</color> " : "[ ] ") + l.Label);
                 }
             }
             _inspectorBody.text = string.Join("\n", lines);
@@ -368,7 +402,7 @@ namespace TradingEmpire.Terminal
             bool landmark = def.TradeLevels != null;
             var cost = def.Levels[b.Level - 1].UpgradeCost;
             _upgrade.gameObject.SetActive(!landmark);
-            if (!landmark) { Ui.SetButtonLabel(_upgrade, cost.HasValue ? "Upgrade  " + cost.Value : "Max level"); Ui.SetButtonColor(_upgrade, cost.HasValue && b.Status == BuildStatus.Complete && s.Balance >= cost.Value ? new Color(0.1f, 0.5f, 0.4f) : Theme.PanelAlt); }
+            if (!landmark) { Ui.SetButtonLabel(_upgrade, cost.HasValue ? "Upgrade  " + cost.Value : "Max level"); Style(_upgrade, cost.HasValue && b.Status == BuildStatus.Complete && s.Balance >= cost.Value ? Theme.Primary : Segment, cost.HasValue && b.Status == BuildStatus.Complete && s.Balance >= cost.Value ? Color.white : Theme.Muted); }
             Ui.SetButtonLabel(_demolish, "Demolish  (+" + City.DemolishRefund(b.Id) + ")");
         }
 
@@ -378,7 +412,7 @@ namespace TradingEmpire.Terminal
             var a = _world.Trading.State.Account;
             _transferInfo.text = "Trading account    " + a.Balance + "\nMovable to city    " + _world.Transfers.EligibleAmount()
                 + "\nCity treasury      " + City.TreasuryBalance + "\nMovable to trading " + _world.Transfers.EligibleToTrading()
-                + "\n<color=#8594ad>Only realized funds can leave the trading account.</color>";
+                + "\n<color=#5c6b75>Only realized funds can leave the trading account.</color>";
         }
 
         void RefreshPolicies(CityState s)
@@ -389,8 +423,8 @@ namespace TradingEmpire.Terminal
                 bool locked = !City.IsUnlocked(p.UnlockId);
                 var b = _policyButtons[p.Id];
                 Ui.SetButtonLabel(b, locked ? "LOCKED" : on ? "ON" : "OFF");
-                Ui.SetButtonColor(b, on ? new Color(0.1f, 0.5f, 0.4f) : locked ? new Color(0.12f, 0.14f, 0.18f) : Theme.PanelAlt);
-                _policyTexts[p.Id].text = locked && p.LockedText != null ? "<color=#f5bf3d>" + p.LockedText + "</color>\n" + p.Description : p.Description;
+                Style(b, on ? Theme.Good : locked ? Segment : Color.white, on ? Color.white : locked ? Theme.Muted : Theme.Ink);
+                _policyTexts[p.Id].text = locked && p.LockedText != null ? "<color=#9e6b05>" + p.LockedText + "</color>\n" + p.Description : p.Description;
             }
         }
     }
