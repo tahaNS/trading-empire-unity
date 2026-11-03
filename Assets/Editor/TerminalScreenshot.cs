@@ -123,6 +123,9 @@ namespace TradingEmpire.EditorTools
                 app.Terminal.Chart.Select(trendId);
             }
             Shot(app, cam, rt, prefix + "-terminal.png");
+            scaler.scaleFactor = 1.4f;
+            Shot(app, cam, rt, prefix + "-terminal-large.png");
+            scaler.scaleFactor = 1f;
 
             // indicators: a moving average and Bollinger bands over the candles, RSI and MACD in strips, with the window open
             s.Drawings.Clear();

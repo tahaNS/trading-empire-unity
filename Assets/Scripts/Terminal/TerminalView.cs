@@ -82,7 +82,7 @@ namespace TradingEmpire.Terminal
         }
 
         /// <summary>Redraw immediately (used by the editor screenshot tool, where Update does not run).</summary>
-        public void RefreshNow() { _dirty = false; Refresh(); }
+        public void RefreshNow() { _dirty = false; _barWidth = -1; FitTopBar(); Refresh(); }
 
         public void SelectTab(int tab) { _tab = tab; _journalSig = null; _dirty = true; }
 
@@ -123,6 +123,7 @@ namespace TradingEmpire.Terminal
         void BuildTopBar(RectTransform root)
         {
             var bar = Ui.Rect(root, "TopBar");
+            _topBar = bar;
             Ui.Place(bar, new Vector2(0, 1), Vector2.one, new Vector2(8, -76), new Vector2(-8, -8));
             Ui.Panel(bar, "Bg", Theme.Panel).rectTransform.SetAsFirstSibling();
             Ui.Stretch((RectTransform)bar.Find("Bg"));
@@ -141,7 +142,7 @@ namespace TradingEmpire.Terminal
             Ui.Place(_datasetName.rectTransform, new Vector2(0, 1), new Vector2(0, 1), new Vector2(312, -30), new Vector2(760, -4));
 
             var badgeBg = Ui.Box(bar, "BadgeBg", new Color(0.35f, 0.25f, 0.05f));
-            Ui.Place(badgeBg.rectTransform, new Vector2(0, 1), new Vector2(0, 1), new Vector2(770, -28), new Vector2(960, -6));
+            Ui.Place(badgeBg.rectTransform, new Vector2(0, 1), new Vector2(0, 1), new Vector2(748, -28), new Vector2(906, -6));
             _badge = Ui.Label(badgeBg.transform, "SYNTHETIC TEST DATA", 11, Theme.Accent, TextAnchor.MiddleCenter, false, true);
 
             if (_onBack != null)
@@ -492,8 +493,26 @@ namespace TradingEmpire.Terminal
 
         // ---------------------------------------------------------------- per-frame
 
+        RectTransform _topBar;
+        float _barWidth = -1;
+
+        /// <summary>The top bar is laid out for about 1640 pixels; on a narrower screen it scales down (keeping the full width) so nothing overlaps.</summary>
+        void FitTopBar()
+        {
+            float width = ((RectTransform)transform).rect.width;
+            if (Mathf.Approximately(width, _barWidth) || width < 100) return;
+            _barWidth = width;
+            float scale = Mathf.Clamp(width / 1640f, 0.45f, 1f);
+            _topBar.pivot = new Vector2(0, 1);
+            _topBar.localScale = new Vector3(scale, scale, 1f);
+            float inner = width - 16f;
+            _topBar.offsetMin = new Vector2(8f, -76f);
+            _topBar.offsetMax = new Vector2(inner / scale - width + 8f, -8f);
+        }
+
         void Update()
         {
+            FitTopBar();
             HandleKeys();
             if (_dirty) { _dirty = false; Refresh(); }
             if (_toast != null && _toast.transform.parent.gameObject.activeSelf && Time.unscaledTime > _toastUntil)
