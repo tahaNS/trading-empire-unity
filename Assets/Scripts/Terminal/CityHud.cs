@@ -22,6 +22,38 @@ namespace TradingEmpire.Terminal
         public Action OnPhoto, OnSound;
         public Func<bool> IsMuted;
         Button _soundButton;
+        RectTransform _pillRow, _landRow;
+        float _layoutWidth = -1;
+
+        /// <summary>When the screen is too narrow for the cards and the buttons on one line (a large interface size), the buttons drop to a row of their own.</summary>
+        void ApplyTopLayout()
+        {
+            float width = ((RectTransform)transform).rect.width;
+            if (Mathf.Approximately(width, _layoutWidth) || width < 100) return;
+            _layoutWidth = width;
+            bool compact = width < 1480f;
+            var top = new Vector2(0, 1); var topRight = new Vector2(1, 1);
+            if (compact)
+            {
+                Ui.Place(_pillRow, top, topRight, new Vector2(12, -124), new Vector2(-12, -92));
+                Ui.Place(_landRow, top, topRight, new Vector2(12, -160), new Vector2(-12, -128));
+            }
+            else
+            {
+                Ui.Place(_pillRow, top, topRight, new Vector2(880, -52), new Vector2(-12, -12));
+                Ui.Place(_landRow, top, topRight, new Vector2(880, -92), new Vector2(-12, -58));
+            }
+            if (_inspector != null) _inspector.offsetMax = new Vector2(-12, compact ? -168 : -102);
+            // the policy and finance panels start below the buttons too
+            foreach (var panel in new[] { _transferPanel, _policyPanel })
+            {
+                if (panel == null) continue;
+                float h = panel.rect.height;
+                panel.anchoredPosition = new Vector2(panel.anchoredPosition.x, 0);
+                panel.offsetMax = new Vector2(panel.offsetMax.x, compact ? -170 : -96);
+                panel.offsetMin = new Vector2(panel.offsetMin.x, panel.offsetMax.y - h);
+            }
+        }
 
         Text _date, _treasury, _net, _chips, _toast;
         readonly List<Button> _speedButtons = new List<Button>();
@@ -63,7 +95,7 @@ namespace TradingEmpire.Terminal
         void MarkDirty() { _dirty = true; }
         void OnDestroy() { if (_world != null) { _world.City.Changed -= MarkDirty; _world.Clock.ViewChanged -= MarkDirty; _world.Trading.Changed -= MarkDirty; } }
 
-        public void RefreshNow() { _dirty = false; Refresh(); }
+        public void RefreshNow() { _dirty = false; _layoutWidth = -1; ApplyTopLayout(); Refresh(); }
 
         // ---------------------------------------------------------------- layout
 
@@ -116,6 +148,7 @@ namespace TradingEmpire.Terminal
 
             // top-right pills
             var row = Ui.Rect(root, "Pills");
+            _pillRow = row;
             Ui.Place(row, new Vector2(0, 1), new Vector2(1, 1), new Vector2(880, -52), new Vector2(-12, -12));
             float rx = 0;
             AddRight(row, "Open Terminal", ref rx, 128, () => _openTerminal(), true);
@@ -127,6 +160,7 @@ namespace TradingEmpire.Terminal
             if (_openMenu != null) AddRight(row, "Progress", ref rx, 74, () => _openMenu(1));
             AddRight(row, "Finances", ref rx, 74, () => Toggle(_transferPanel, _policyPanel));
             var landRow = Ui.Rect(root, "LandRow");
+            _landRow = landRow;
             Ui.Place(landRow, new Vector2(0, 1), new Vector2(1, 1), new Vector2(880, -92), new Vector2(-12, -58));
             float lx = 0;
             _landButton = AddRight(landRow, "Buy land", ref lx, 210, () => City.ExpandLand());
@@ -307,6 +341,7 @@ namespace TradingEmpire.Terminal
 
         void Update()
         {
+            ApplyTopLayout();
             AnimateFloaters();
             if (_dirty) { _dirty = false; Refresh(); }
             if (_toast != null && _toast.transform.parent.gameObject.activeSelf && Time.unscaledTime > _toastUntil) _toast.transform.parent.gameObject.SetActive(false);

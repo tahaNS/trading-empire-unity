@@ -71,6 +71,12 @@ namespace TradingEmpire.EditorTools
 
             Shot(app, cam, rt, prefix + "-city.png");
 
+            // a large interface size: the buttons drop to their own row instead of overlapping the cards
+            scaler.scaleFactor = 1.25f;
+            w.City.Select(w.City.State.Buildings[0].Id);
+            Shot(app, cam, rt, prefix + "-city-large.png");
+            scaler.scaleFactor = 1f;
+
             // the inspector and the transfer panel
             w.City.Select(w.City.State.Buildings[0].Id);
             var hud = app.CityHud;
