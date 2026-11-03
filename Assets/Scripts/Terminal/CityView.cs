@@ -51,10 +51,15 @@ namespace TradingEmpire.Terminal
             _buildingRoot = new GameObject("Buildings").transform; _buildingRoot.SetParent(_root, false);
             _ghostRoot = new GameObject("Ghost").transform; _ghostRoot.SetParent(_root, false);
 
-            // the default material of a primitive is a lit, always-available shader: clone it for every colour
-            var probe = GameObject.CreatePrimitive(PrimitiveType.Cube);
-            _baseMaterial = probe.GetComponent<Renderer>().sharedMaterial;
-            DestroyImmediate(probe);
+            // our own tiny lit shader (in Resources, so it is always in a build); the standard shader gets stripped from builds
+            var shader = Resources.Load<Shader>("CityLit");
+            if (shader != null && shader.isSupported) _baseMaterial = new Material(shader);
+            else
+            {
+                var probe = GameObject.CreatePrimitive(PrimitiveType.Cube);
+                _baseMaterial = probe.GetComponent<Renderer>().sharedMaterial;
+                DestroyImmediate(probe);
+            }
 
             BuildGround();
             SetupCamera();

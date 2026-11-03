@@ -206,8 +206,24 @@ namespace TradingEmpire.Terminal
             }
         }
 
+        // a debug aid: "-te-screenshot file.png" saves a picture of the running game after a few seconds, then quits
+        string _shotPath;
+        float _shotAt;
+
+        void Awake()
+        {
+            var args = Environment.GetCommandLineArgs();
+            for (int i = 0; i < args.Length - 1; i++) if (args[i] == "-te-screenshot") { _shotPath = args[i + 1]; _shotAt = Time.unscaledTime + 5f; }
+        }
+
         void Update()
         {
+            if (_shotPath != null && Time.unscaledTime > _shotAt)
+            {
+                ScreenCapture.CaptureScreenshot(_shotPath);
+                _shotAt = float.MaxValue;
+                Invoke(nameof(QuitNow), 1.5f);
+            }
             // the city clock always runs; the market only while the terminal is open (a challenge has its own market)
             World.Clock.Advance(Time.unscaledDeltaTime);
             if (TerminalOpen)
@@ -222,6 +238,8 @@ namespace TradingEmpire.Terminal
                 Saves.Save(true);
             }
         }
+
+        void QuitNow() { Application.Quit(); }
 
         void OnApplicationQuit() { if (_persist && World != null) Saves.Save(true); }
         void OnApplicationPause(bool paused) { if (paused && _persist && World != null) Saves.Save(true); }

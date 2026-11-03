@@ -54,7 +54,8 @@ Menu **Trading Empire > Build macOS app**, or from the command line (close the e
 ```bash
 Unity -batchmode -quit -projectPath . -executeMethod TradingEmpire.EditorTools.BuildMac.BuildCli -buildOutput Builds/macOS
 ```
-The result is a universal (Apple silicon and Intel) `Trading Empire.app`, about 100 MB. It is not signed with a developer certificate, so the first time you open a copy that was downloaded, right-click it and choose Open. Saves live in `~/Library/Application Support/com.tradingempire.game/saves`.
+The result is a universal (Apple silicon and Intel) `Trading Empire.app`, about 100 MB. It is not signed with a developer certificate, so the first time you open a copy that was downloaded, right-click it and choose Open. The app can take its own picture for checking: `"Trading Empire.app/Contents/MacOS/Trading Empire" -te-screenshot out.png` saves a screenshot after a few seconds and quits.
+Saves live in `~/Library/Application Support/com.tradingempire.game/saves`.
 
 ## Opening in Unity
 Open the folder with Unity Hub (editor `6000.2.13f1`). Unity generates `.meta` files on first import; commit them afterwards.
