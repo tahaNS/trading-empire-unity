@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- The same source files Unity compiles (Assets/Scripts/Core), built with plain dotnet so the logic can be tested without the editor.
+       netstandard2.1 + C# 9 matches Unity 6's supported surface. -->
+  <PropertyGroup>
+    <TargetFramework>netstandard2.1</TargetFramework>
+    <LangVersion>9.0</LangVersion>
+    <RootNamespace>TradingEmpire.Core</RootNamespace>
+    <AssemblyName>TradingEmpire.Core</AssemblyName>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <Nullable>disable</Nullable>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="../../Assets/Scripts/Core/**/*.cs" />
+  </ItemGroup>
+</Project>
