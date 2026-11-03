@@ -29,6 +29,13 @@ namespace TradingEmpire.Terminal
             new ToolDef("ellipse", "El", "Ellipse: click two corners (or drag)."),
             new ToolDef("fib", "Fib", "Fibonacci retracement: click the swing start and end."),
             new ToolDef("fibext", "FX", "Fibonacci extension: click the move (2 points), then where it restarts."),
+            new ToolDef("regression", "Rg", "Regression channel: click the first and last bar of the stretch."),
+            new ToolDef("pitchfork", "Pf", "Andrews' pitchfork: click three points (the pivot, then a high and a low)."),
+            new ToolDef("gannfan", "Gn", "Gann fan: click the origin, then a second point."),
+            new ToolDef("fibchannel", "FC", "Fibonacci channel: click two points, then the width."),
+            new ToolDef("fibtime", "FT", "Fibonacci time zones: click two points one unit apart."),
+            new ToolDef("fibfan", "FF", "Fibonacci speed fan: click the start and end of a move."),
+            new ToolDef("fibarcs", "FA", "Fibonacci arcs: click the start and end of a move."),
             new ToolDef("text", "Txt", "Text note: click where it goes, then type its text above."),
             new ToolDef("pricelabel", "$", "Price label: click a price."),
             new ToolDef("up", "Up", "Arrow up marker: click."),
@@ -130,7 +137,7 @@ namespace TradingEmpire.Terminal
             Ui.Place(strip, new Vector2(0, 0), new Vector2(0, 1), new Vector2(2, 28), new Vector2(40, -4));
             Ui.Panel(strip, "Bg", new Color(0.05f, 0.07f, 0.1f, 0.9f)).rectTransform.SetAsFirstSibling();
             Ui.Stretch((RectTransform)strip.Find("Bg"));
-            float y = 2, h = 24;
+            float y = 2, h = 19;
             foreach (var t in Tools)
             {
                 var tool = t;
@@ -467,11 +474,23 @@ namespace TradingEmpire.Terminal
             return lines;
         }
 
+        List<Vector2> ClosesBetween(long t0, long t1)
+        {
+            var g = _graphic; var list = new List<Vector2>();
+            for (int i = 0; i < g.Bars.Count; i++)
+            {
+                if (g.Bars[i].Time < t0) continue;
+                if (g.Bars[i].Time > t1) break;
+                list.Add(new Vector2(g.XOfIndex(i), g.YOf(g.Bars[i].Close)));
+            }
+            return list;
+        }
+
         void BuildScene()
         {
             var g = _graphic;
             if (_session == null || g.Count == 0) { g.Scene = null; return; }
-            var map = new ChartMap { X = g.XOfTime, Y = p => g.YOf(p), Plot = g.Plot, Digits = _data != null ? _data.Digits : 5, PipPoints = _data != null ? _data.PipPoints : 10 };
+            var map = new ChartMap { X = g.XOfTime, Y = p => g.YOf(p), Plot = g.Plot, Digits = _data != null ? _data.Digits : 5, PipPoints = _data != null ? _data.PipPoints : 10, Closes = ClosesBetween };
             Drawing preview = null;
             if (_tool != null && _pending.Count > 0 && NeededAnchors(_tool) > 0)
             {

@@ -123,8 +123,8 @@ namespace TradingEmpire.PlayModeTests
             {
                 var buttons = LiveButtons().Where(b => !skip.Any(s => LabelOf(b).StartsWith(s, StringComparison.Ordinal))).ToArray();
                 // the photo bar hides itself for the frame in which it takes a picture
-                if (buttons.Length == 0) { yield return null; buttons = LiveButtons().Where(b => !skip.Any(s => LabelOf(b).StartsWith(s, StringComparison.Ordinal))).ToArray(); }
-                Assert.Greater(buttons.Length, 0, "no clickable button left on screen (round " + round + ")");
+                if (buttons.Length == 0) { yield return new WaitForSecondsRealtime(0.7f); buttons = LiveButtons().Where(b => !skip.Any(s => LabelOf(b).StartsWith(s, StringComparison.Ordinal))).ToArray(); }
+                Assert.Greater(buttons.Length, 0, "no clickable button left on screen (round " + round + ", photo " + _app.Photo + ", terminal " + _app.TerminalOpen + ", menu " + _app.MenuHud.Open + ", over " + (_app.World.GameOver.State != null) + ", barActive " + _app.PhotoBar.transform.Find("Bar").gameObject.activeSelf + ")");
                 var pick = buttons[rng.Next(buttons.Length)];
                 pick.onClick.Invoke();
                 clicks++;
@@ -487,6 +487,28 @@ namespace TradingEmpire.PlayModeTests
             yield return null;
             Assert.IsFalse(_app.CityView.Touring);
             Assert.IsTrue(_app.CityHud.gameObject.activeInHierarchy);
+        }
+
+        [UnityTest]
+        public IEnumerator The_guided_first_trade_follows_real_actions()
+        {
+            _app = GameApp.Create(null, false, true);
+            yield return null;
+            Find("Open Terminal").onClick.Invoke();
+            yield return null;
+            _app.Tutorial.StartTutorial();
+            yield return null;
+            Assert.AreEqual(0, _app.Tutorial.Tutorial.Step);
+            for (int i = 0; i < 5; i++) _app.World.Trading.Step();
+            yield return new WaitForSeconds(0.4f);
+            Assert.AreEqual(1, _app.Tutorial.Tutorial.Step);
+            _app.World.Trading.QuickOrder(Direction.Buy, 10, 20, 40);
+            yield return new WaitForSeconds(0.4f);
+            Assert.AreEqual(2, _app.Tutorial.Tutorial.Step);
+            // the welcome and the guide never throw while the buttons are smashed (covered by the smash test); the card hides on dismiss
+            _app.Tutorial.Tutorial.Dismiss();
+            _app.Tutorial.Refresh();
+            Assert.IsFalse(_app.Tutorial.gameObject.transform.Find("Card").gameObject.activeSelf);
         }
     }
 }

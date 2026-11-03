@@ -13,7 +13,7 @@ namespace TradingEmpire.Terminal
         RectTransform _bar;
         Button _tourButton;
         Text _message;
-        float _messageUntil;
+        float _messageUntil, _restoreAt;
 
         public static PhotoBar Build(Transform canvas, GameApp app)
         {
@@ -43,6 +43,12 @@ namespace TradingEmpire.Terminal
             msgBg.gameObject.SetActive(false);
         }
 
+        /// <summary>A screenshot interrupted by leaving photo mode must not leave the bar hidden for next time.</summary>
+        void OnEnable()
+        {
+            if (_bar != null) _bar.gameObject.SetActive(true);
+        }
+
         void ToggleTour()
         {
             if (_app.CityView.Touring) _app.CityView.StopTour(); else _app.CityView.StartTour();
@@ -54,6 +60,7 @@ namespace TradingEmpire.Terminal
         void Update()
         {
             if (Input.GetKeyDown(KeyCode.Escape)) _app.SetPhoto(false);
+            if (!_bar.gameObject.activeSelf && Time.unscaledTime > _restoreAt) _bar.gameObject.SetActive(true);
             RefreshTour();
             if (_message != null && _message.transform.parent.gameObject.activeSelf && Time.unscaledTime > _messageUntil) _message.transform.parent.gameObject.SetActive(false);
         }
@@ -69,6 +76,7 @@ namespace TradingEmpire.Terminal
         IEnumerator Shoot()
         {
             _bar.gameObject.SetActive(false);
+            _restoreAt = Time.unscaledTime + 0.5f; // safety net: never leave the bar hidden if the end of the frame is not reached
             _message.transform.parent.gameObject.SetActive(false);
             yield return new WaitForEndOfFrame();
             string path = null, error = null;

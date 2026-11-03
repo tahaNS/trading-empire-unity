@@ -45,7 +45,7 @@ Phase 5 (done): sound (all synthesised: effects for trades, building, rent, miss
 
 The 3D city matches the browser game's look: detailed low-poly buildings with lit and dark windows, striped awnings, balconies, rooftop units, pitched-roof houses, a hotel pool, a fountain plaza and the Trading HQ ticker; paved lots in district colours; streets with sidewalks, lane dashes, zebra crossings and lamps; trees on unowned land and along the streets; cars and pedestrians; a sun with soft shadows; construction sites with scaffolding that grow, and a bounce when finished; floating rent numbers. Everything is generated in code from the web version's own numbers (no art files). `-te-demo` shows a ready-made town (it never touches your save).
 
-Ported since: 16 indicators (overlays and strips, settings, colours, saved with the game), photo mode with screenshots and a fly-over, sound / photo / help buttons. Not ported from the web version: the other drawing kinds (regression channel, pitchfork, Gann fan, Fibonacci channel / time zones / fan / arcs are kept and shown as outlines), the first-run tutorial and trading guide, the object tree and order draft panels, Electron packaging.
+Ported since: 16 indicators (overlays and strips, settings, colours, saved with the game), all 21 drawing kinds, photo mode with screenshots and a fly-over, the welcome dialog and guided first trade, sound / photo / help buttons. Not ported from the web version: the trading guide, the object tree and order draft panels, Electron packaging.
 
 ## Tests
 - `cd Tests/Core.Tests && dotnet test` the game rules (196 tests, including a random-play stress test: many seeds of random trading, building, transfers, policies, challenges, with a save and reload every few steps).

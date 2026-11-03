@@ -296,6 +296,8 @@ namespace TradingEmpire.Terminal
                 + "<b>The terminal</b>\nPlay or step the market, then buy or sell with a stop-loss and take-profit. Only candles already revealed are shown: no peeking ahead. When a stop and a target are both hit in one candle, the stop-loss counts first. Use the tools on the left to draw, and Indicators (top right of the chart) for moving averages, RSI, MACD and more.\n\n"
                 + "<b>Keys</b>\nSpace play or pause the market,  Right arrow next candle,  Shift+Right next bar,  L / S long or short,  mouse wheel zoom,  W A S D or arrows and right-drag move the city camera,  R rotate a building,  Esc cancel or back.\n\n"
                 + "<b>Photo mode</b>\nThe Photo button hides the interface: save a screenshot (to Pictures/Trading Empire) or start a slow fly-over of the city. Esc leaves.";
+            AddButton("Guide me through a first trade", () => { Show(false); _app.Tutorial.StartTutorial(); }, 0, 430, 260, 34, Theme.Primary);
+            AddButton("Show the welcome", () => { Show(false); _app.Tutorial.ShowWelcome(); }, 270, 430, 200, 34);
         }
 
         void Report(string text) { _message.text = text ?? ""; _dirty = true; }

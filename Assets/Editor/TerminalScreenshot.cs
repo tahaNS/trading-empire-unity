@@ -130,6 +130,28 @@ namespace TradingEmpire.EditorTools
             app.Terminal.Chart.IndicatorWindow.Show(false);
             s.Indicators.Clear();
 
+            // the seven drawing kinds that used to show as outlines
+            {
+                var cd = s.ChartData(); var bars = cd.Candles; int n = bars.Count; long pp = cd.PipPoints;
+                s.Drawings.Clear();
+                s.Drawings.Add(DrawingKinds.Make("regression", "#6ea8ff", ("a", new Anchor(bars[n - 90].Time, bars[n - 90].Close)), ("b", new Anchor(bars[n - 10].Time, bars[n - 10].Close))));
+                s.Drawings.Add(DrawingKinds.Make("pitchfork", "#c792ea", ("a", new Anchor(bars[n - 110].Time, bars[n - 110].Low)), ("b", new Anchor(bars[n - 80].Time, bars[n - 80].High)), ("c", new Anchor(bars[n - 60].Time, bars[n - 60].Low))));
+                s.Drawings.Add(DrawingKinds.Make("gannfan", "#f2c25b", ("a", new Anchor(bars[n - 100].Time, bars[n - 100].Low)), ("b", new Anchor(bars[n - 70].Time, bars[n - 100].Low + 15 * pp))));
+                s.Drawings.Add(DrawingKinds.Make("fibchannel", "#2fcfae", ("a", new Anchor(bars[n - 70].Time, bars[n - 70].Close)), ("b", new Anchor(bars[n - 30].Time, bars[n - 30].Close)), ("c", new Anchor(bars[n - 50].Time, bars[n - 50].Close + 12 * pp))));
+                s.Drawings.Add(DrawingKinds.Make("fibtime", "#f2686b", ("a", new Anchor(bars[n - 120].Time, bars[n - 120].Close)), ("b", new Anchor(bars[n - 118].Time, bars[n - 118].Close))));
+                s.Drawings.Add(DrawingKinds.Make("fibfan", "#6ea8ff", ("a", new Anchor(bars[n - 60].Time, bars[n - 60].Low)), ("b", new Anchor(bars[n - 25].Time, bars[n - 25].High))));
+                s.Drawings.Add(DrawingKinds.Make("fibarcs", "#c792ea", ("a", new Anchor(bars[n - 40].Time, bars[n - 40].Low)), ("b", new Anchor(bars[n - 15].Time, bars[n - 15].High))));
+            }
+            Shot(app, cam, rt, prefix + "-drawings.png");
+            s.Drawings.Clear();
+
+            // the guided first trade
+            app.Tutorial.StartTutorial();
+            app.Tutorial.Refresh();
+            Shot(app, cam, rt, prefix + "-tutorial.png");
+            app.Tutorial.Tutorial.Dismiss();
+            app.Tutorial.Refresh();
+
             // the journal: close the trade and write about it
             s.CloseAll();
             s.QuickOrder(Direction.Sell, 10, 15, 30);

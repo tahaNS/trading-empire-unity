@@ -31,6 +31,8 @@ namespace TradingEmpire.Terminal
         public Rect Plot;
         public int Digits = 5;
         public int PipPoints = 10;
+        /// <summary>The chart pixel x and the close of every revealed bar between two times (for the regression channel).</summary>
+        public Func<long, long, List<Vector2>> Closes;
     }
 
     /// <summary>Turns drawings into lines, fills, labels and handles. Kinds that cannot be drawn yet show as a dotted outline with their name, so nothing is invisible.</summary>
@@ -102,6 +104,16 @@ namespace TradingEmpire.Terminal
                 else { if (r < t0) return p; if (r < t1) t1 = r; }
             }
             return p + d * t0;
+        }
+
+        static readonly (float, string)[] GannRatios = { (8f, "8x1"), (4f, "4x1"), (3f, "3x1"), (2f, "2x1"), (1f, "1x1"), (1f / 2, "1x2"), (1f / 3, "1x3"), (1f / 4, "1x4"), (1f / 8, "1x8") };
+
+        /// <summary>The point where a ray from p along dir leaves the plot.</summary>
+        static Vector2 RayEnd(Vector2 p, Vector2 dir, Rect plot)
+        {
+            if (dir.sqrMagnitude < 1e-9f) return p;
+            var far = p + dir.normalized * (plot.width + plot.height + 2000f);
+            return ClipToPlot(far, p, plot);
         }
 
         static void Add(DrawingScene s, Drawing d, ChartMap m, bool selected)
@@ -247,6 +259,131 @@ namespace TradingEmpire.Terminal
                     s.Labels.Add(new SceneLabel { At = new Vector2(xl + 6, yEntry + (isLong ? 10 : -10)), Text = (isLong ? "LONG" : "SHORT") + "   R:R " + rr.ToString("0.0", CultureInfo.InvariantCulture), Color = Color.white, Anchor = TextAnchor.MiddleLeft, DrawingId = d.Id });
                     s.Labels.Add(new SceneLabel { At = new Vector2(xl + 6, yTp + (yTp > yEntry ? -10 : 10)), Text = "TP " + tpPips.ToString("0.0", CultureInfo.InvariantCulture) + " pips   " + Price(m, B.Price), Color = green, Anchor = TextAnchor.MiddleLeft, DrawingId = d.Id });
                     s.Labels.Add(new SceneLabel { At = new Vector2(xl + 6, ySl + (ySl > yEntry ? -10 : 10)), Text = "SL " + slPips.ToString("0.0", CultureInfo.InvariantCulture) + " pips   " + Price(m, C.Price), Color = red, Anchor = TextAnchor.MiddleLeft, DrawingId = d.Id });
+                    break;
+                }
+                case "regression":
+                {
+                    var A = d.GetAnchor("a").Value; var B = d.GetAnchor("b").Value;
+                    var a = P(m, A); var b = P(m, B);
+                    var pts = m.Closes != null ? m.Closes(Math.Min(A.Time, B.Time), Math.Max(A.Time, B.Time)) : new List<Vector2>();
+                    if (pts.Count < 3) { Line(s, a, b, d, selected, 0.7f, true, false); break; }
+                    // least squares through the closes (x in pixels, y in pixels: the line and its deviation are the same in either unit)
+                    int n = pts.Count;
+                    float mx = pts.Average(q => q.x), my = pts.Average(q => q.y), sxx = 0, sxy = 0;
+                    foreach (var q in pts) { sxx += (q.x - mx) * (q.x - mx); sxy += (q.x - mx) * (q.y - my); }
+                    float slope = sxx == 0 ? 0 : sxy / sxx;
+                    Func<float, float> at = x => my + slope * (x - mx);
+                    float sd = Mathf.Sqrt(pts.Sum(q => (q.y - at(q.x)) * (q.y - at(q.x))) / n);
+                    float devs = (float)(d.Num("devs") ?? 2);
+                    float x0 = pts[0].x, x1 = pts[n - 1].x;
+                    Vector2 U0 = new Vector2(x0, at(x0) + devs * sd), U1 = new Vector2(x1, at(x1) + devs * sd), L0 = new Vector2(x0, at(x0) - devs * sd), L1 = new Vector2(x1, at(x1) - devs * sd);
+                    if (d.Str("fill") == null || d.Flag("fill")) s.Fills.Add(new SceneFill { Points = new[] { U0, U1, L1, L0 }, Color = Parse(d.Color, 0.12f), DrawingId = d.Id });
+                    Line(s, new Vector2(x0, at(x0)), new Vector2(x1, at(x1)), d, selected, 0.8f, true, false);
+                    Line(s, U0, U1, d, selected); Line(s, L0, L1, d, selected);
+                    break;
+                }
+                case "pitchfork":
+                {
+                    var a = P(m, d.GetAnchor("a").Value); var b = P(m, d.GetAnchor("b").Value); var c = P(m, d.GetAnchor("c").Value);
+                    var mid = (b + c) / 2; var dir = mid - a;
+                    if (dir.sqrMagnitude < 1e-6f) { Line(s, a, b, d, selected); break; }
+                    var eb = RayEnd(b, dir, plot); var ec = RayEnd(c, dir, plot);
+                    s.Fills.Add(new SceneFill { Points = new[] { b, eb, ec, c }, Color = Parse(d.Color, 0.12f), DrawingId = d.Id });
+                    s.Lines.Add(new SceneLine { A = a, B = RayEnd(a, dir, plot), Color = Parse(d.Color), Width = (float)d.Width * 1.3f + (selected ? 0.7f : 0f), DrawingId = d.Id, Dashed = d.Dash == "dashed", Dotted = d.Dash == "dotted" });
+                    Line(s, b, eb, d, selected); Line(s, c, ec, d, selected);
+                    Line(s, b, c, d, selected, 0.6f, false, true);
+                    break;
+                }
+                case "gannfan":
+                {
+                    var a = P(m, d.GetAnchor("a").Value); var b = P(m, d.GetAnchor("b").Value);
+                    float dx = b.x - a.x, dy = b.y - a.y;
+                    if (Mathf.Abs(dx) < 1e-3f) { Line(s, a, b, d, selected); break; }
+                    foreach (var (r, label) in GannRatios)
+                    {
+                        var end = RayEnd(a, new Vector2(dx, dy * r), plot);
+                        Line(s, a, end, d, selected, r == 1 ? 1f : 0.55f);
+                        float lx = Mathf.Clamp(end.x, plot.xMin + 24, plot.xMax - 24);
+                        s.Labels.Add(new SceneLabel { At = new Vector2(lx - 22, a.y + dy * r * (lx - a.x) / dx + 8), Text = label, Color = Parse(d.Color, 0.85f), Anchor = TextAnchor.MiddleLeft, DrawingId = d.Id });
+                    }
+                    break;
+                }
+                case "fibchannel":
+                {
+                    var a = P(m, d.GetAnchor("a").Value); var b = P(m, d.GetAnchor("b").Value); var c = P(m, d.GetAnchor("c").Value);
+                    float k = Mathf.Approximately(b.x, a.x) ? 0 : (b.y - a.y) / (b.x - a.x);
+                    float off = c.y - (a.y + k * (c.x - a.x));
+                    Line(s, a, b, d, selected, 0.7f, true, false);
+                    bool extend = d.Str("extend") == null || d.Flag("extend");
+                    var lines = new List<(Vector2 a, Vector2 b)>();
+                    foreach (double lv in DrawingKinds.FibLevelsOf(d).OrderBy(l => l))
+                    {
+                        var p0 = new Vector2(a.x, a.y + off * (float)lv); var p1 = new Vector2(b.x, b.y + off * (float)lv);
+                        var (e0, e1) = extend ? Extend(p0, p1, plot, true, false) : (p0, p1);
+                        Line(s, e0, e1, d, selected, lv == 0 || lv == 1 ? 0.95f : 0.65f);
+                        s.Labels.Add(new SceneLabel { At = new Vector2(Mathf.Min(e1.x, plot.xMax) - 40, e1.y + 8), Text = lv.ToString("0.###", CultureInfo.InvariantCulture), Color = Parse(d.Color), Anchor = TextAnchor.MiddleLeft, DrawingId = d.Id });
+                        lines.Add((e0, e1));
+                    }
+                    if (d.Str("fill") == null || d.Flag("fill"))
+                        for (int i = 0; i + 1 < lines.Count; i += 2) s.Fills.Add(new SceneFill { Points = new[] { lines[i].a, lines[i].b, lines[i + 1].b, lines[i + 1].a }, Color = Parse(d.Color, 0.06f), DrawingId = d.Id });
+                    break;
+                }
+                case "fibtime":
+                {
+                    var a = P(m, d.GetAnchor("a").Value); var b = P(m, d.GetAnchor("b").Value);
+                    float unit = b.x - a.x;
+                    Line(s, a, b, d, selected, 0.5f, true, false);
+                    if (Mathf.Abs(unit) < 1f) break;
+                    foreach (double lv in DrawingKinds.FibLevelsOf(d).OrderBy(l => l))
+                    {
+                        float x = Mathf.Round(a.x + unit * (float)lv) + 0.5f;
+                        if (x < plot.xMin - 2000 || x > plot.xMax + 2000) continue;
+                        Line(s, new Vector2(x, plot.yMin), new Vector2(x, plot.yMax), d, selected, lv == 0 || lv == 1 ? 0.9f : 0.55f);
+                        s.Labels.Add(new SceneLabel { At = new Vector2(x + 4, plot.yMax - 10), Text = lv.ToString("0.###", CultureInfo.InvariantCulture), Color = Parse(d.Color), Anchor = TextAnchor.MiddleLeft, DrawingId = d.Id });
+                    }
+                    break;
+                }
+                case "fibfan":
+                {
+                    var a = P(m, d.GetAnchor("a").Value); var b = P(m, d.GetAnchor("b").Value);
+                    float dx = b.x - a.x;
+                    if (Mathf.Abs(dx) < 1e-3f) { Line(s, a, b, d, selected); break; }
+                    Line(s, new Vector2(b.x, a.y), b, d, selected, 0.5f, false, true);
+                    var ends = new List<(double lv, Vector2 end)>();
+                    foreach (double lv in DrawingKinds.FibLevelsOf(d).OrderBy(l => l))
+                        ends.Add((lv, RayEnd(a, new Vector2(dx, (b.y - a.y) * (float)lv), plot)));
+                    for (int i = 0; i < ends.Count; i++)
+                    {
+                        if ((d.Str("fill") == null || d.Flag("fill")) && i + 1 < ends.Count && i % 2 == 0)
+                            s.Fills.Add(new SceneFill { Points = new[] { a, ends[i].end, ends[i + 1].end }, Color = Parse(d.Color, 0.07f), DrawingId = d.Id });
+                        Line(s, a, ends[i].end, d, selected, ends[i].lv == 1 ? 1f : 0.65f);
+                        var e = ends[i].end;
+                        float lx = Mathf.Clamp(e.x, plot.xMin + 24, plot.xMax - 4);
+                        s.Labels.Add(new SceneLabel { At = new Vector2(lx - 30, a.y + (e.y - a.y) / (Mathf.Abs(e.x - a.x) < 1e-3f ? 1f : e.x - a.x) * (lx - a.x) + 8), Text = ends[i].lv.ToString("0.###", CultureInfo.InvariantCulture), Color = Parse(d.Color), Anchor = TextAnchor.MiddleLeft, DrawingId = d.Id });
+                    }
+                    break;
+                }
+                case "fibarcs":
+                {
+                    var a = P(m, d.GetAnchor("a").Value); var b = P(m, d.GetAnchor("b").Value);
+                    float R = Vector2.Distance(a, b), ang = Mathf.Atan2(b.y - a.y, b.x - a.x);
+                    Line(s, a, b, d, selected, 0.6f, true, false);
+                    if (R < 1f) break;
+                    foreach (double lv in DrawingKinds.FibLevelsOf(d).OrderBy(l => l))
+                    {
+                        float r = R * (float)lv;
+                        float alpha = lv == 1 ? 0.95f : 0.65f;
+                        const int Steps = 36;
+                        Vector2 prev = Vector2.zero;
+                        for (int i = 0; i <= Steps; i++)
+                        {
+                            float t = ang - Mathf.PI / 2 + Mathf.PI * i / Steps;
+                            var q = b + new Vector2(Mathf.Cos(t), Mathf.Sin(t)) * r;
+                            if (i > 0) Line(s, prev, q, d, selected, alpha);
+                            prev = q;
+                        }
+                        s.Labels.Add(new SceneLabel { At = b + new Vector2(Mathf.Cos(ang), Mathf.Sin(ang)) * r + new Vector2(4, 8), Text = lv.ToString("0.###", CultureInfo.InvariantCulture), Color = Parse(d.Color), Anchor = TextAnchor.MiddleLeft, DrawingId = d.Id });
+                    }
                     break;
                 }
                 default:

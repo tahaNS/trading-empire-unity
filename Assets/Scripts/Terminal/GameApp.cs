@@ -26,6 +26,7 @@ namespace TradingEmpire.Terminal
         public SaveManager Saves { get; private set; }
         public AudioManager Audio { get; private set; }
         public PhotoBar PhotoBar { get; private set; }
+        public TutorialCard Tutorial { get; private set; }
         public bool TerminalOpen { get; private set; }
         public bool Photo { get; private set; }
         public string LastError { get; private set; }
@@ -115,6 +116,7 @@ namespace TradingEmpire.Terminal
             app.Terminal = TerminalView.Build(canvasGo.transform, app.World.Trading, () => app.ShowTerminal(false), app.Challenges);
             app.MenuHud = MenuHud.Build(canvasGo.transform, app);
             app.PhotoBar = PhotoBar.Build(canvasGo.transform, app);
+            app.Tutorial = TutorialCard.Build(canvasGo.transform, app, persist);
             app.ShowTerminal(false);
             if (startupNotice != null) app.World.City.Announce(string.IsNullOrEmpty(startupNotice) ? NoticeKind.Info : NoticeKind.Error, startupNotice);
             app._nextAutosave = Time.unscaledTime + AutosaveSeconds;
