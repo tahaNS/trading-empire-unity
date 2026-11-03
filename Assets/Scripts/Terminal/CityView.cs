@@ -330,6 +330,7 @@ namespace TradingEmpire.Terminal
         /// <summary>Photo mode: the camera still moves but clicks no longer build or select.</summary>
         public bool Photo;
         public bool Touring { get { return _tour != null; } }
+        Vector3 _rightDown;
 
         public void StartTour()
         {
@@ -408,6 +409,9 @@ namespace TradingEmpire.Terminal
                 if (Input.GetKey(KeyCode.A) || Input.GetKey(KeyCode.LeftArrow)) move -= right;
             }
             _focus += move * (_zoom * 1.2f * Time.unscaledDeltaTime);
+            if (Input.GetMouseButtonDown(1)) _rightDown = Input.mousePosition;
+            // a right click that did not drag lets go of the building being placed, or the selection
+            if (Input.GetMouseButtonUp(1) && !Photo && Vector3.Distance(Input.mousePosition, _rightDown) < 6f && !PointerOverUi()) City.Escape();
             if (Input.GetMouseButtonDown(1) || Input.GetMouseButtonDown(2)) _dragLast = Input.mousePosition;
             if (Input.GetMouseButton(1) || Input.GetMouseButton(2))
             {
