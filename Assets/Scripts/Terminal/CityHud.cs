@@ -97,12 +97,12 @@ namespace TradingEmpire.Terminal
             _chips = Caption(net.transform, "", 14, 210, 50, 18, 11, Theme.Good, true);
 
             var date = Ui.Card(root, "DateCard");
-            Ui.Place(date.rectTransform, new Vector2(0, 1), new Vector2(0, 1), new Vector2(458, -84), new Vector2(908, -12));
+            Ui.Place(date.rectTransform, new Vector2(0, 1), new Vector2(0, 1), new Vector2(458, -84), new Vector2(868, -12));
             Caption(date.transform, "DATE", 14, 120, 8, 18, 11, Theme.Muted, true);
             _date = Caption(date.transform, "", 14, 130, 30, 30, 16, Theme.Ink, true);
             var seg = Ui.Box(date.transform, "Segments", Segment);
             Ui.Rounded(seg, 8f);
-            Ui.Place(seg.rectTransform, new Vector2(0, 0), new Vector2(1, 1), new Vector2(166, 14), new Vector2(-12, -14));
+            Ui.Place(seg.rectTransform, new Vector2(0, 0), new Vector2(1, 1), new Vector2(150, 14), new Vector2(-10, -14));
             int[] speeds = GameClock.Speeds;
             string[] names = { "Pause", "1x", "2x", "5x", "10x" };
             for (int i = 0; i < speeds.Length; i++)
@@ -116,18 +116,18 @@ namespace TradingEmpire.Terminal
 
             // top-right pills
             var row = Ui.Rect(root, "Pills");
-            Ui.Place(row, new Vector2(0, 1), new Vector2(1, 1), new Vector2(920, -52), new Vector2(-12, -12));
+            Ui.Place(row, new Vector2(0, 1), new Vector2(1, 1), new Vector2(880, -52), new Vector2(-12, -12));
             float rx = 0;
-            AddRight(row, "Open Terminal", ref rx, 140, () => _openTerminal(), true);
-            AddRight(row, "?", ref rx, 34, () => { if (_openMenu != null) _openMenu(4); });
-            AddRight(row, "Photo", ref rx, 62, () => { if (OnPhoto != null) OnPhoto(); });
-            _soundButton = AddRight(row, "Sound", ref rx, 62, () => { if (OnSound != null) OnSound(); _dirty = true; });
-            if (_openMenu != null) AddRight(row, "Game", ref rx, 64, () => _openMenu(0));
-            AddRight(row, "Policies", ref rx, 84, () => Toggle(_policyPanel, _transferPanel));
-            if (_openMenu != null) AddRight(row, "Progress", ref rx, 84, () => _openMenu(1));
-            AddRight(row, "Finances", ref rx, 84, () => Toggle(_transferPanel, _policyPanel));
+            AddRight(row, "Open Terminal", ref rx, 128, () => _openTerminal(), true);
+            AddRight(row, "?", ref rx, 30, () => { if (_openMenu != null) _openMenu(4); });
+            AddRight(row, "Photo", ref rx, 54, () => { if (OnPhoto != null) OnPhoto(); });
+            _soundButton = AddRight(row, "Sound", ref rx, 58, () => { if (OnSound != null) OnSound(); _dirty = true; });
+            if (_openMenu != null) AddRight(row, "Game", ref rx, 56, () => _openMenu(0));
+            AddRight(row, "Policies", ref rx, 74, () => Toggle(_policyPanel, _transferPanel));
+            if (_openMenu != null) AddRight(row, "Progress", ref rx, 74, () => _openMenu(1));
+            AddRight(row, "Finances", ref rx, 74, () => Toggle(_transferPanel, _policyPanel));
             var landRow = Ui.Rect(root, "LandRow");
-            Ui.Place(landRow, new Vector2(0, 1), new Vector2(1, 1), new Vector2(920, -92), new Vector2(-12, -58));
+            Ui.Place(landRow, new Vector2(0, 1), new Vector2(1, 1), new Vector2(880, -92), new Vector2(-12, -58));
             float lx = 0;
             _landButton = AddRight(landRow, "Buy land", ref lx, 210, () => City.ExpandLand());
 
@@ -148,7 +148,7 @@ namespace TradingEmpire.Terminal
         {
             var b = Ui.Pill(bar, label, act, primary, 13);
             Ui.Place((RectTransform)b.transform, new Vector2(1, 0), Vector2.one, new Vector2(rx - w, 0), new Vector2(rx, 0));
-            rx -= w + 8;
+            rx -= w + 6;
             return b;
         }
 
