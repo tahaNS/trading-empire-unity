@@ -128,6 +128,7 @@ namespace TradingEmpire.EditorTools
             }
             Shot(app, cam, rt, prefix + "-terminal.png");
             scaler.scaleFactor = 1.4f;
+            app.Terminal.RefreshNow();
             Shot(app, cam, rt, prefix + "-terminal-large.png");
             scaler.scaleFactor = 1f;
 

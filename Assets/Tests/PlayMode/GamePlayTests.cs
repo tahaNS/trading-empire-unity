@@ -632,5 +632,44 @@ namespace TradingEmpire.PlayModeTests
             _app.Terminal.ToggleFull();
             Assert.IsTrue(_app.Terminal.transform.Find("RightPanel").gameObject.activeSelf);
         }
+
+        [UnityTest]
+        public IEnumerator In_full_chart_a_plan_can_be_placed_and_the_chart_can_be_dragged_with_auto_scale_off()
+        {
+            _app = GameApp.Create(null, false, true);
+            yield return null;
+            Find("Open Terminal").onClick.Invoke();
+            yield return null;
+            for (int i = 0; i < 300; i++) _app.World.Trading.Step();
+            var chart = _app.Terminal.Chart;
+            _app.Terminal.ToggleFull();
+            Find("Long").onClick.Invoke();
+            yield return null;
+            Assert.IsNotNull(_app.World.Trading.Draft);
+            var bar = _app.Terminal.transform.Find("FullOrderBar");
+            Assert.IsTrue(bar.gameObject.activeSelf, "the order bar is missing in full chart");
+            // drag the chart with auto scale off: it scrolls through time and moves the price range
+            _app.World.Trading.CancelDraft();
+            chart.SetAuto(false);
+            _app.Terminal.RefreshNow();
+            var g = chart.Graphic;
+            long lo0 = g.Lo; int pan0 = g.PanBars;
+            var start = new Vector2(g.Plot.center.x, g.Plot.center.y);
+            chart.PointerDown(start);
+            chart.PointerDrag(start + new Vector2(g.Step * 12, 40));
+            chart.PointerUp(start);
+            g.ComputeLayout();
+            Assert.Greater(g.PanBars, pan0, "the chart did not scroll back in time");
+            Assert.AreNotEqual(lo0, g.Lo, "the price range did not move");
+            // back to live
+            g.PanBars = 0;
+            _app.Terminal.ToggleFull();
+            yield return null;
+            Find("Long").onClick.Invoke();
+            yield return null;
+            Find("Place order").onClick.Invoke();
+            yield return null;
+            Assert.AreEqual(1, _app.World.Trading.State.Positions.Count);
+        }
     }
 }

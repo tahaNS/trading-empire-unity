@@ -485,9 +485,11 @@ namespace TradingEmpire.Terminal
 
             var local = LocalMouse();
             bool inPlot = _graphic.Plot.Contains(local);
-            if (_pending.Count > 0 || _dragHandle >= 0 || _moving) LayoutLabels(); // the preview and the drag follow the pointer
+            if (_pending.Count > 0 || _dragHandle >= 0 || _moving || _panning || _axisDrag) LayoutLabels(); // the preview and the drag follow the pointer
 
-            if (Input.GetMouseButtonDown(0) && inPlot && TopHitIsChart()) PointerDown(local);
+            bool inAxis = local.x > _graphic.Plot.xMax && local.x < _graphic.Plot.xMax + CandleGraphic.AxisRight && local.y > _graphic.Plot.yMin && local.y < _graphic.Plot.yMax;
+            if (Input.GetKeyDown(KeyCode.End)) { _graphic.PanBars = 0; _graphic.SetVerticesDirty(); LayoutLabels(); }
+            if (Input.GetMouseButtonDown(0) && (inPlot || inAxis) && TopHitIsChart()) { if (inAxis && _tool == null) { _axisDrag = true; _panLast = local; } else if (inPlot) PointerDown(local); }
             else if (Input.GetMouseButton(0)) PointerDrag(local);
             if (Input.GetMouseButtonUp(0)) PointerUp(local);
         }
@@ -522,6 +524,7 @@ namespace TradingEmpire.Terminal
             }
             string hit = scene != null ? DrawingRenderer.HitTest(scene, _session.Drawings.Items, local) : null;
             Select(hit);
+            if (hit == null) { _panning = true; _panLast = local; _panCarry = 0; }
             if (hit != null) { var d = SelectedDrawing(); if (d != null && !d.Locked) { _moving = true; _lastAnchor = a; } }
         }
 
@@ -529,6 +532,7 @@ namespace TradingEmpire.Terminal
         {
             var a = AnchorAt(local);
             if (_dragDraft != null) { DragDraft(_dragDraft, (long)Math.Round(_graphic.PriceOfY(local.y))); return; }
+            if (_panning || _axisDrag) { PanBy(local); return; }
             if (_dragHandle >= 0 && _selectedId != null) { int idx = _dragHandle; EditSelected(d => DrawingKinds.SetAnchorAt(d, idx, a)); }
             else if (_moving && _selectedId != null)
             {
@@ -541,6 +545,7 @@ namespace TradingEmpire.Terminal
         public void PointerUp(Vector2 local)
         {
             _dragDraft = null;
+            _panning = false; _axisDrag = false;
             _graphic.Freeze = false;
             _dragHandle = -1;
             _moving = false;
@@ -658,6 +663,38 @@ namespace TradingEmpire.Terminal
         }
 
         string _dragDraft;
+        bool _panning, _axisDrag;
+        Vector2 _panLast;
+        float _panCarry;
+
+        /// <summary>Drag the chart: left and right scroll through time; up and down move the price range when auto scale is off. Dragging the price axis scales it.</summary>
+        void PanBy(Vector2 local)
+        {
+            var d = local - _panLast;
+            _panLast = local;
+            var g = _graphic;
+            if (_axisDrag)
+            {
+                if (g.Hi > g.Lo)
+                {
+                    if (!g.ManualRange) SetAuto(false);
+                    long mid = (g.Lo + g.Hi) / 2, half = Math.Max(2, (long)((g.Hi - g.Lo) / 2 * Mathf.Exp(-d.y * 0.01f)));
+                    g.Lo = mid - half; g.Hi = mid + half;
+                }
+            }
+            else
+            {
+                _panCarry += d.x / Mathf.Max(1f, g.Step);
+                int bars = (int)_panCarry;
+                if (bars != 0) { g.PanBars += bars; _panCarry -= bars; }
+                if (g.ManualRange && g.Hi > g.Lo && g.Plot.height > 1)
+                {
+                    long shift = (long)(d.y / g.Plot.height * (g.Hi - g.Lo));
+                    g.Lo -= shift; g.Hi -= shift;
+                }
+            }
+            g.SetVerticesDirty();
+        }
 
         void DragDraft(string tag, long price)
         {
@@ -790,7 +827,7 @@ namespace TradingEmpire.Terminal
 
             int every = Mathf.Max(5, (int)(Mathf.Round(g.Count / 6f / 5f) * 5));
             int k = 0;
-            for (int i = g.FirstIndex; i < g.Bars.Count; i++)
+            for (int i = g.FirstIndex; i < g.EndIndex; i++)
             {
                 if (i % every != 0) continue;
                 var t = Pooled(_timeLabels, k++, 12, Theme.Dim);

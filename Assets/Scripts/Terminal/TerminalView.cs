@@ -82,7 +82,7 @@ namespace TradingEmpire.Terminal
         }
 
         /// <summary>Redraw immediately (used by the editor screenshot tool, where Update does not run).</summary>
-        public void RefreshNow() { _dirty = false; _barWidth = -1; FitTopBar(); Refresh(); }
+        public void RefreshNow() { _dirty = false; _barWidth = -1; _topFitWidth = -1; FitTopBar(); FitChartTop(); Refresh(); }
 
         public void SelectTab(int tab) { _tab = tab; _journalSig = null; _dirty = true; }
 
@@ -107,6 +107,7 @@ namespace TradingEmpire.Terminal
             _chart.ToggleFull = ToggleFull;
             _chartHost = chartHost;
             BuildChartTop(root, topH, rightW, chartTopH);
+            BuildFullBar(root);
             Session.Drawings.Changed += MarkDirty;
 
             var right = Ui.Rect(root, "RightPanel");
@@ -274,6 +275,21 @@ namespace TradingEmpire.Terminal
 
         RectTransform _chartHost, _right, _bottomPanel;
         Transform _chartTop;
+        RectTransform _chartTopInner, _fullBar;
+        Text _fullBarText;
+        float _topFitWidth = -1;
+
+        /// <summary>The chart strip is laid out for about 1180 pixels; when narrower, its buttons scale down together instead of overlapping.</summary>
+        void FitChartTop()
+        {
+            if (_chartTopInner == null) return;
+            float w = ((RectTransform)_chartTop).rect.width;
+            if (Mathf.Approximately(w, _topFitWidth) || w < 100) return;
+            _topFitWidth = w;
+            float scale = Mathf.Clamp(w / 1180f, 0.5f, 1f);
+            _chartTopInner.localScale = new Vector3(scale, scale, 1f);
+            _chartTopInner.offsetMax = new Vector2(w / scale - w, 0f);
+        }
         Text _clockText;
         Button _autoBtn, _objectsBtn, _indicatorsBtn, _topLong, _topShort, _fullBtn;
 
@@ -285,22 +301,43 @@ namespace TradingEmpire.Terminal
             Ui.Place(top, new Vector2(0, 1), Vector2.one, new Vector2(8, -topH - 8 - chartTopH), new Vector2(-rightW - 16, -topH - 8));
             Ui.Panel(top, "Bg", Theme.Panel).rectTransform.SetAsFirstSibling();
             Ui.Stretch((RectTransform)top.Find("Bg"));
-            _tfRow = Ui.Rect(top, "Timeframes");
+            var inner = Ui.Rect(top, "Inner");
+            _chartTopInner = inner;
+            inner.anchorMin = Vector2.zero; inner.anchorMax = Vector2.one; inner.pivot = new Vector2(0, 0.5f);
+            inner.offsetMin = Vector2.zero; inner.offsetMax = Vector2.zero;
+            _tfRow = Ui.Rect(inner, "Timeframes");
             Ui.Place(_tfRow, new Vector2(0, 0), new Vector2(0, 1), new Vector2(6, 0), new Vector2(520, 0));
-            _autoBtn = Ui.Button(top, "Auto scale on  A", () => _chart.SetAuto(!_chart.AutoScale), Theme.PanelAlt, 11);
+            _autoBtn = Ui.Button(inner, "Auto scale on  A", () => _chart.SetAuto(!_chart.AutoScale), Theme.PanelAlt, 11);
             Ui.Place((RectTransform)_autoBtn.transform, new Vector2(0, 0), new Vector2(0, 1), new Vector2(530, 4), new Vector2(648, -4));
-            _objectsBtn = Ui.Button(top, "Objects", () => _chart.ToggleObjectPanel(), Theme.PanelAlt, 11);
+            _objectsBtn = Ui.Button(inner, "Objects", () => _chart.ToggleObjectPanel(), Theme.PanelAlt, 11);
             Ui.Place((RectTransform)_objectsBtn.transform, new Vector2(0, 0), new Vector2(0, 1), new Vector2(654, 4), new Vector2(752, -4));
-            _indicatorsBtn = Ui.Button(top, "Indicators", () => _chart.ToggleIndicatorPanel(), Theme.PanelAlt, 11);
+            _indicatorsBtn = Ui.Button(inner, "Indicators", () => _chart.ToggleIndicatorPanel(), Theme.PanelAlt, 11);
             Ui.Place((RectTransform)_indicatorsBtn.transform, new Vector2(0, 0), new Vector2(0, 1), new Vector2(758, 4), new Vector2(868, -4));
-            _fullBtn = Ui.Button(top, "Full chart  F", () => ToggleFull(), Theme.PanelAlt, 11);
+            _fullBtn = Ui.Button(inner, "Full chart  F", () => ToggleFull(), Theme.PanelAlt, 11);
             Ui.Place((RectTransform)_fullBtn.transform, new Vector2(1, 0), new Vector2(1, 1), new Vector2(-112, 4), new Vector2(-6, -4));
-            _topShort = Ui.Button(top, "Short  S", () => Session.StartDraft(Direction.Sell), new Color(0.65f, 0.2f, 0.24f), 11);
+            _topShort = Ui.Button(inner, "Short  S", () => Session.StartDraft(Direction.Sell), new Color(0.65f, 0.2f, 0.24f), 11);
             Ui.Place((RectTransform)_topShort.transform, new Vector2(1, 0), new Vector2(1, 1), new Vector2(-196, 4), new Vector2(-118, -4));
-            _topLong = Ui.Button(top, "Long  L", () => Session.StartDraft(Direction.Buy), new Color(0.1f, 0.5f, 0.4f), 11);
+            _topLong = Ui.Button(inner, "Long  L", () => Session.StartDraft(Direction.Buy), new Color(0.1f, 0.5f, 0.4f), 11);
             Ui.Place((RectTransform)_topLong.transform, new Vector2(1, 0), new Vector2(1, 1), new Vector2(-278, 4), new Vector2(-202, -4));
             _chart.StateChanged = RefreshChartTop;
         }
+
+        /// <summary>In full-chart mode the order panel is hidden: a small bar at the bottom still lets you place or drop the plan.</summary>
+        void BuildFullBar(RectTransform root)
+        {
+            var card = Ui.Card(root, "FullOrderBar", 10f, new Color(0.09f, 0.12f, 0.17f, 0.97f));
+            _fullBar = card.rectTransform;
+            Ui.Place(_fullBar, new Vector2(0.5f, 0), new Vector2(0.5f, 0), new Vector2(-330, 22), new Vector2(330, 66));
+            _fullBarText = Ui.Label(_fullBar, "", 12, Theme.Text, TextAnchor.MiddleLeft, true);
+            Ui.Place(_fullBarText.rectTransform, Vector2.zero, Vector2.one, new Vector2(12, 0), new Vector2(-250, 0));
+            var place = Ui.Button(_fullBar, "Place order", () => Session.SubmitDraft(), new Color(0.1f, 0.5f, 0.4f), 13);
+            Ui.Place((RectTransform)place.transform, new Vector2(1, 0), new Vector2(1, 1), new Vector2(-240, 6), new Vector2(-96, -6));
+            _fullPlace = place;
+            var cancel = Ui.Button(_fullBar, "Cancel", () => Session.CancelDraft(), Theme.PanelAlt, 12);
+            Ui.Place((RectTransform)cancel.transform, new Vector2(1, 0), new Vector2(1, 1), new Vector2(-90, 6), new Vector2(-8, -6));
+            _fullBar.gameObject.SetActive(false);
+        }
+        Button _fullPlace;
 
         void RefreshChartTop()
         {
@@ -403,6 +440,18 @@ namespace TradingEmpire.Terminal
         {
             var v = Session.DescribeDraft();
             bool open = v != null;
+            if (_fullBar != null)
+            {
+                _fullBar.gameObject.SetActive(_full && open);
+                if (_full && open)
+                {
+                    string fullKind = v.Resolution.Kind == EntryClass.Market ? "market" : v.Resolution.Kind == EntryClass.Limit ? "limit" : "stop";
+                    _fullBarText.text = (v.Draft.Direction == Direction.Buy ? "LONG " : "SHORT ") + fullKind + "  " + (v.Resolution.Lots.HasValue ? Units.FormatLots(v.Resolution.Lots.Value) + " lots" : "-")
+                        + (v.Preview != null ? "\nrisk " + (v.Preview.Risk.HasValue ? v.Preview.Risk.Value.ToString() : "-") + "  R:R " + (v.Preview.RewardRisk.HasValue ? v.Preview.RewardRisk.Value.ToString("0.0", CultureInfo.InvariantCulture) : "-") : "")
+                        + ((v.Resolution.Issue ?? v.Rejection) != null ? "\n" + (v.Resolution.Issue ?? v.Rejection) : "");
+                    _fullPlace.interactable = v.Valid;
+                }
+            }
             _orderStart.gameObject.SetActive(!open);
             _orderDraft.gameObject.SetActive(open);
             _draftTitle.gameObject.SetActive(open);
@@ -656,6 +705,7 @@ namespace TradingEmpire.Terminal
         void Update()
         {
             FitTopBar();
+            FitChartTop();
             HandleKeys();
             if (_dirty) { _dirty = false; Refresh(); }
             if (_toast != null && _toast.transform.parent.gameObject.activeSelf && Time.unscaledTime > _toastUntil)

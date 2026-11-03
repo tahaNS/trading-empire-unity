@@ -102,6 +102,7 @@ namespace TradingEmpire.Terminal
             + "<b>L / S</b>  plan a long / short trade\n<b>Enter</b>  place the planned order\n<b>Esc</b>  cancel the tool or selection, then back to the city\n"
             + "<b>V</b>  cursor     <b>H</b>  horizontal line     <b>T</b>  trend line     <b>R</b>  rectangle     <b>G</b>  Fibonacci     <b>X</b>  text note\n"
             + "<b>M</b>  measure (pips, bars, time, percent)     <b>A</b>  auto scale on / off     <b>F</b>  full chart (Esc leaves it)\n"
-            + "<b>Delete</b>  remove the selected drawing\n<b>Mouse wheel</b>  zoom the chart     <b>Ctrl + wheel</b>  scale the price axis";
+            + "<b>Delete</b>  remove the selected drawing\n<b>Mouse wheel</b>  zoom the chart     <b>Ctrl + wheel</b>  scale the price axis\n"
+            + "<b>Drag the chart</b>  scroll through time (and up / down when auto scale is off)     <b>Drag the price axis</b>  scale it     <b>End</b>  back to the newest bar";
     }
 }

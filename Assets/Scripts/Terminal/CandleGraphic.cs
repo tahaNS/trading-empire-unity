@@ -53,6 +53,10 @@ namespace TradingEmpire.Terminal
         public Rect Plot;
         public long Lo, Hi;
         public int FirstIndex, Count;
+        /// <summary>One past the last bar shown (the newest bar unless the player scrolled back in time).</summary>
+        public int EndIndex;
+        /// <summary>How many bars the view is scrolled back from the newest (0 = following the live bar).</summary>
+        public int PanBars;
         public float Step;
 
         public override Texture mainTexture { get { return s_WhiteTexture; } }
@@ -108,14 +112,17 @@ namespace TradingEmpire.Terminal
 
             int visible = Mathf.Clamp(VisibleBars, 20, 600);
             int rightPad = Mathf.Max(3, visible / 12); // empty space on the right so the live candle has room
-            Count = Mathf.Min(total, visible - rightPad);
-            FirstIndex = total - Count;
+            int pan = Mathf.Clamp(PanBars, 0, Mathf.Max(0, total - 5));
+            PanBars = pan;
+            EndIndex = total - pan;
+            Count = Mathf.Min(EndIndex, visible - rightPad);
+            FirstIndex = EndIndex - Count;
             Step = Plot.width / visible;
 
             // while a plan line is being dragged the price range stays put, so the line does not run away from the pointer
             if ((Freeze || ManualRange) && Hi > Lo) return;
             long lo = long.MaxValue, hi = long.MinValue;
-            for (int i = FirstIndex; i < total; i++) { lo = Math.Min(lo, Bars[i].Low); hi = Math.Max(hi, Bars[i].High); }
+            for (int i = FirstIndex; i < EndIndex; i++) { lo = Math.Min(lo, Bars[i].Low); hi = Math.Max(hi, Bars[i].High); }
             foreach (var l in Lines) { if (l.Price > 0) { lo = Math.Min(lo, l.Price); hi = Math.Max(hi, l.Price); } }
             long pad = Math.Max(1, (hi - lo) / 14);
             Lo = lo - pad; Hi = hi + pad;
@@ -133,11 +140,11 @@ namespace TradingEmpire.Terminal
             foreach (long p in GridPrices(Lo, Hi, 6)) Quad(vh, Plot.xMin, YOf(p) - 0.5f, Plot.xMax, YOf(p) + 0.5f, Theme.Grid);
             // vertical grid roughly every 20 bars
             int vEvery = Mathf.Max(5, (int)(Mathf.Round(Count / 6f / 5f) * 5));
-            for (int i = FirstIndex; i < total; i++)
+            for (int i = FirstIndex; i < EndIndex; i++)
                 if (i % vEvery == 0) Quad(vh, XOfIndex(i) - 0.5f, Plot.yMin, XOfIndex(i) + 0.5f, Plot.yMax, Theme.Grid);
 
             float bodyW = Mathf.Max(1f, Step * 0.7f);
-            for (int i = FirstIndex; i < total; i++)
+            for (int i = FirstIndex; i < EndIndex; i++)
             {
                 var c = Bars[i];
                 bool bull = c.Close >= c.Open;
@@ -169,7 +176,7 @@ namespace TradingEmpire.Terminal
             // find the bar containing the marker time
             long start = Timeframes.BucketStart(m.Time, TfMs);
             int idx = -1;
-            for (int i = Bars.Count - 1; i >= FirstIndex; i--) { if (Bars[i].Time == start) { idx = i; break; } if (Bars[i].Time < start) break; }
+            for (int i = EndIndex - 1; i >= FirstIndex; i--) { if (Bars[i].Time == start) { idx = i; break; } if (Bars[i].Time < start) break; }
             if (idx < 0 || m.Price < Lo || m.Price > Hi) return;
             float x = XOfIndex(idx), y = YOf(m.Price), s = 6f;
             if (m.Kind == MarkerKind.Exit) { Quad(vh, x - s * 0.6f, y - s * 0.6f, x + s * 0.6f, y + s * 0.6f, Theme.Accent); return; }
@@ -192,7 +199,7 @@ namespace TradingEmpire.Terminal
             return i < 0 || i >= l.Values.Length ? double.NaN : l.Values[i];
         }
 
-        public double LastValue(ComputedLine l) { for (int i = Bars.Count - 1; i >= FirstIndex; i--) { double v = ValueAt(l, i); if (!double.IsNaN(v)) return v; } return double.NaN; }
+        public double LastValue(ComputedLine l) { for (int i = EndIndex - 1; i >= FirstIndex; i--) { double v = ValueAt(l, i); if (!double.IsNaN(v)) return v; } return double.NaN; }
 
         /// <summary>The vertical range a strip shows: fixed for RSI-like indicators, else the visible values with a little room.</summary>
         public void PaneRange(ComputedIndicator ind, out double lo, out double hi)
@@ -201,7 +208,7 @@ namespace TradingEmpire.Terminal
             lo = double.MaxValue; hi = double.MinValue;
             foreach (var l in ind.Lines)
             {
-                for (int i = FirstIndex; i < Bars.Count; i++) { double v = ValueAt(l, i); if (double.IsNaN(v)) continue; lo = Math.Min(lo, v); hi = Math.Max(hi, v); }
+                for (int i = FirstIndex; i < EndIndex; i++) { double v = ValueAt(l, i); if (double.IsNaN(v)) continue; lo = Math.Min(lo, v); hi = Math.Max(hi, v); }
                 if (l.Kind == LineKind.Hist) { lo = Math.Min(lo, 0); hi = Math.Max(hi, 0); }
             }
             foreach (double gd in ind.Def.Guides) { lo = Math.Min(lo, gd); hi = Math.Max(hi, gd); }
@@ -232,7 +239,7 @@ namespace TradingEmpire.Terminal
                 if (up != null && dn != null)
                 {
                     var fc = Hex(up.Color); fc.a = 0.07f;
-                    for (int i = Mathf.Max(FirstIndex, 1); i < Bars.Count; i++)
+                    for (int i = Mathf.Max(FirstIndex, 1); i < EndIndex; i++)
                     {
                         double a0 = ValueAt(up, i - 1), a1 = ValueAt(up, i), b0 = ValueAt(dn, i - 1), b1 = ValueAt(dn, i);
                         if (double.IsNaN(a0) || double.IsNaN(a1) || double.IsNaN(b0) || double.IsNaN(b1)) continue;
@@ -251,7 +258,7 @@ namespace TradingEmpire.Terminal
                 {
                     float bw = Mathf.Max(1f, Step * 0.6f);
                     float baseY = Mathf.Clamp(y(Math.Max(0, lo)), clip.yMin, clip.yMax);
-                    for (int i = FirstIndex; i < Bars.Count; i++)
+                    for (int i = FirstIndex; i < EndIndex; i++)
                     {
                         double v = ValueAt(line, i);
                         if (double.IsNaN(v)) continue;
@@ -263,7 +270,7 @@ namespace TradingEmpire.Terminal
                 }
                 else if (line.Kind == LineKind.Dots)
                 {
-                    for (int i = FirstIndex; i < Bars.Count; i++)
+                    for (int i = FirstIndex; i < EndIndex; i++)
                     {
                         double v = ValueAt(line, i);
                         if (double.IsNaN(v)) continue;
@@ -275,7 +282,7 @@ namespace TradingEmpire.Terminal
                 else
                 {
                     bool have = false; Vector2 prev = Vector2.zero;
-                    for (int i = FirstIndex; i < Bars.Count; i++)
+                    for (int i = FirstIndex; i < EndIndex; i++)
                     {
                         double v = ValueAt(line, i);
                         if (double.IsNaN(v)) { have = false; continue; }
