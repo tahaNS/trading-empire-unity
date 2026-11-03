@@ -31,6 +31,13 @@ namespace TradingEmpire.Terminal
         public List<ChartMarker> Markers = new List<ChartMarker>();
         /// <summary>The chart drawings, already in chart-local pixels (built by the chart view).</summary>
         public DrawingScene Scene;
+        /// <summary>Indicators drawn over the candles, and those in strips below them. Values start at bar <see cref="IndOffset"/>.</summary>
+        public List<ComputedIndicator> Overlays = new List<ComputedIndicator>();
+        public List<ComputedIndicator> Panes = new List<ComputedIndicator>();
+        public int IndOffset;
+        public const float PaneH = 86f, PaneGap = 4f;
+        /// <summary>Bottom of the plot area including the strips: where the time labels go.</summary>
+        public float AxisY;
         public int Digits = 5;
         public long TfMs = 60000;
         /// <summary>How many bars fit across the plot (the mouse wheel changes it).</summary>
@@ -87,7 +94,9 @@ namespace TradingEmpire.Terminal
         public void ComputeLayout()
         {
             var r = GetPixelAdjustedRect();
-            Plot = new Rect(r.xMin + LeftMargin, r.yMin + AxisBottom, r.width - AxisRight - LeftMargin, r.height - AxisBottom - 6);
+            AxisY = r.yMin + AxisBottom;
+            float panesH = Panes.Count * (PaneH + PaneGap);
+            Plot = new Rect(r.xMin + LeftMargin, AxisY + panesH, r.width - AxisRight - LeftMargin, r.height - AxisBottom - panesH - 6);
             int total = Bars.Count;
             if (total == 0 || Plot.width < 20 || Plot.height < 20) { Count = 0; return; }
 
@@ -132,6 +141,8 @@ namespace TradingEmpire.Terminal
                 Quad(vh, x - bodyW / 2, y0, x + bodyW / 2, y1, col);
             }
 
+            foreach (var ind in Overlays) DrawIndicator(vh, ind, Plot, v => YOf(v), 0, 0);
+            for (int k = 0; k < Panes.Count; k++) DrawPane(vh, k);
             foreach (var l in Lines) DrawLine(vh, l);
             foreach (var m in Markers) DrawMarker(vh, m);
             if (Scene != null) DrawScene(vh);
@@ -158,6 +169,134 @@ namespace TradingEmpire.Terminal
             Color col = buy ? Theme.Bull : Theme.Bear;
             float dir = buy ? -1f : 1f; // buys point up from below, sells point down from above
             Tri(vh, new Vector2(x, y), new Vector2(x - s, y + dir * s * 1.6f), new Vector2(x + s, y + dir * s * 1.6f), col);
+        }
+
+        // ---------- indicators ----------
+
+        public Rect PaneRect(int k)
+        {
+            return new Rect(Plot.xMin, AxisY + (Panes.Count - 1 - k) * (PaneH + PaneGap), Plot.width, PaneH);
+        }
+
+        double ValueAt(ComputedLine l, int bar)
+        {
+            int i = bar - IndOffset;
+            return i < 0 || i >= l.Values.Length ? double.NaN : l.Values[i];
+        }
+
+        public double LastValue(ComputedLine l) { for (int i = Bars.Count - 1; i >= FirstIndex; i--) { double v = ValueAt(l, i); if (!double.IsNaN(v)) return v; } return double.NaN; }
+
+        /// <summary>The vertical range a strip shows: fixed for RSI-like indicators, else the visible values with a little room.</summary>
+        public void PaneRange(ComputedIndicator ind, out double lo, out double hi)
+        {
+            if (ind.Def.Range != null) { lo = ind.Def.Range[0]; hi = ind.Def.Range[1]; return; }
+            lo = double.MaxValue; hi = double.MinValue;
+            foreach (var l in ind.Lines)
+            {
+                for (int i = FirstIndex; i < Bars.Count; i++) { double v = ValueAt(l, i); if (double.IsNaN(v)) continue; lo = Math.Min(lo, v); hi = Math.Max(hi, v); }
+                if (l.Kind == LineKind.Hist) { lo = Math.Min(lo, 0); hi = Math.Max(hi, 0); }
+            }
+            foreach (double gd in ind.Def.Guides) { lo = Math.Min(lo, gd); hi = Math.Max(hi, gd); }
+            if (lo > hi) { lo = 0; hi = 1; }
+            if (hi - lo < 1e-9) hi = lo + 1;
+            double pad = (hi - lo) * 0.08;
+            lo -= pad; hi += pad;
+        }
+
+        void DrawPane(VertexHelper vh, int k)
+        {
+            var ind = Panes[k];
+            var r = PaneRect(k);
+            double lo, hi; PaneRange(ind, out lo, out hi);
+            Func<double, float> y = v => r.yMin + (float)((v - lo) / (hi - lo)) * r.height;
+            Quad(vh, r.xMin, r.yMin, r.xMax, r.yMax, new Color(1f, 1f, 1f, 0.035f));
+            Quad(vh, r.xMin, r.yMax - 0.5f, r.xMax, r.yMax + 0.5f, new Color(1f, 1f, 1f, 0.12f));
+            foreach (double gd in ind.Def.Guides) Quad(vh, r.xMin, y(gd) - 0.5f, r.xMax, y(gd) + 0.5f, new Color(1f, 1f, 1f, 0.09f));
+            DrawIndicator(vh, ind, r, y, lo, hi);
+        }
+
+        void DrawIndicator(VertexHelper vh, ComputedIndicator ind, Rect clip, Func<double, float> y, double lo, double hi)
+        {
+            var def = ind.Def;
+            if (def.Fill != null)
+            {
+                ComputedLine up = ind.Lines.Find(l => l.Key == def.Fill[0]), dn = ind.Lines.Find(l => l.Key == def.Fill[1]);
+                if (up != null && dn != null)
+                {
+                    var fc = Hex(up.Color); fc.a = 0.07f;
+                    for (int i = Mathf.Max(FirstIndex, 1); i < Bars.Count; i++)
+                    {
+                        double a0 = ValueAt(up, i - 1), a1 = ValueAt(up, i), b0 = ValueAt(dn, i - 1), b1 = ValueAt(dn, i);
+                        if (double.IsNaN(a0) || double.IsNaN(a1) || double.IsNaN(b0) || double.IsNaN(b1)) continue;
+                        float x0 = XOfIndex(i - 1), x1 = XOfIndex(i);
+                        Func<double, float> cy = v => Mathf.Clamp(y(v), clip.yMin, clip.yMax);
+                        Tri(vh, new Vector2(x0, cy(a0)), new Vector2(x1, cy(a1)), new Vector2(x1, cy(b1)), fc);
+                        Tri(vh, new Vector2(x0, cy(a0)), new Vector2(x1, cy(b1)), new Vector2(x0, cy(b0)), fc);
+                    }
+                }
+            }
+            float width = ind.Config.Width.HasValue ? (float)ind.Config.Width.Value : 1.5f;
+            foreach (var line in ind.Lines)
+            {
+                var col = Hex(line.Color);
+                if (line.Kind == LineKind.Hist)
+                {
+                    float bw = Mathf.Max(1f, Step * 0.6f);
+                    float baseY = Mathf.Clamp(y(Math.Max(0, lo)), clip.yMin, clip.yMax);
+                    for (int i = FirstIndex; i < Bars.Count; i++)
+                    {
+                        double v = ValueAt(line, i);
+                        if (double.IsNaN(v)) continue;
+                        var c = lo < 0 ? (v >= 0 ? Theme.Bull : Theme.Bear) : col;
+                        c.a = 0.75f;
+                        float x = XOfIndex(i), yy = Mathf.Clamp(y(v), clip.yMin, clip.yMax);
+                        Quad(vh, x - bw / 2, Mathf.Min(baseY, yy), x + bw / 2, Mathf.Max(baseY, yy) + 0.5f, c);
+                    }
+                }
+                else if (line.Kind == LineKind.Dots)
+                {
+                    for (int i = FirstIndex; i < Bars.Count; i++)
+                    {
+                        double v = ValueAt(line, i);
+                        if (double.IsNaN(v)) continue;
+                        float x = XOfIndex(i), yy = y(v);
+                        if (yy < clip.yMin || yy > clip.yMax) continue;
+                        Quad(vh, x - 1.8f, yy - 1.8f, x + 1.8f, yy + 1.8f, col);
+                    }
+                }
+                else
+                {
+                    bool have = false; Vector2 prev = Vector2.zero;
+                    for (int i = FirstIndex; i < Bars.Count; i++)
+                    {
+                        double v = ValueAt(line, i);
+                        if (double.IsNaN(v)) { have = false; continue; }
+                        var cur = new Vector2(XOfIndex(i), y(v));
+                        if (have) { var a = prev; var b = cur; if (ClipSegment(ref a, ref b, clip)) Segment(vh, a, b, width, col); }
+                        prev = cur; have = true;
+                    }
+                }
+            }
+        }
+
+        static Color Hex(string s) { Color c; return ColorUtility.TryParseHtmlString(s, out c) ? c : Color.white; }
+
+        /// <summary>Liang-Barsky: cut a segment to a rectangle (false when it lies entirely outside).</summary>
+        static bool ClipSegment(ref Vector2 a, ref Vector2 b, Rect r)
+        {
+            float t0 = 0, t1 = 1, dx = b.x - a.x, dy = b.y - a.y;
+            for (int k = 0; k < 4; k++)
+            {
+                float p = k == 0 ? -dx : k == 1 ? dx : k == 2 ? -dy : dy;
+                float q = k == 0 ? a.x - r.xMin : k == 1 ? r.xMax - a.x : k == 2 ? a.y - r.yMin : r.yMax - a.y;
+                if (Mathf.Approximately(p, 0)) { if (q < 0) return false; continue; }
+                float t = q / p;
+                if (p < 0) { if (t > t1) return false; if (t > t0) t0 = t; }
+                else { if (t < t0) return false; if (t < t1) t1 = t; }
+            }
+            var na = new Vector2(a.x + dx * t0, a.y + dy * t0); var nb = new Vector2(a.x + dx * t1, a.y + dy * t1);
+            a = na; b = nb;
+            return true;
         }
 
         // ---------- chart drawings ----------

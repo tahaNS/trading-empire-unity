@@ -25,7 +25,9 @@ namespace TradingEmpire.Terminal
         public ChallengeController Challenges { get; private set; }
         public SaveManager Saves { get; private set; }
         public AudioManager Audio { get; private set; }
+        public PhotoBar PhotoBar { get; private set; }
         public bool TerminalOpen { get; private set; }
+        public bool Photo { get; private set; }
         public string LastError { get; private set; }
 
         bool _persist;
@@ -105,10 +107,14 @@ namespace TradingEmpire.Terminal
             app.Audio = AudioManager.Create(app.World);
             app._owned.Add(app.Audio.gameObject);
             app.Challenges = new ChallengeController(app.World, s => { app.Terminal.SetSession(s); if (s != app.World.Trading) app.Audio.Watch(s); });
-            app.CityHud = CityHud.Build(canvasGo.transform, app.World, () => app.ShowTerminal(true), () => app.MenuHud.Show(true));
+            app.CityHud = CityHud.Build(canvasGo.transform, app.World, () => app.ShowTerminal(true), tab => { app.MenuHud.SelectTab(tab); app.MenuHud.Show(true); });
+            app.CityHud.OnPhoto = () => app.SetPhoto(true);
+            app.CityHud.OnSound = () => { if (app.Audio != null) app.Audio.SetMuted(!app.Audio.Muted); };
+            app.CityHud.IsMuted = () => app.Audio != null && app.Audio.Muted;
             app.CityHud.View = app.CityView;
             app.Terminal = TerminalView.Build(canvasGo.transform, app.World.Trading, () => app.ShowTerminal(false), app.Challenges);
             app.MenuHud = MenuHud.Build(canvasGo.transform, app);
+            app.PhotoBar = PhotoBar.Build(canvasGo.transform, app);
             app.ShowTerminal(false);
             if (startupNotice != null) app.World.City.Announce(string.IsNullOrEmpty(startupNotice) ? NoticeKind.Info : NoticeKind.Error, startupNotice);
             app._nextAutosave = Time.unscaledTime + AutosaveSeconds;
@@ -120,11 +126,24 @@ namespace TradingEmpire.Terminal
         {
             TerminalOpen = open;
             Terminal.gameObject.SetActive(open);
-            CityHud.gameObject.SetActive(!open);
+            CityHud.gameObject.SetActive(!open && !Photo);
             CityView.Interactive = !open && !MenuHud.Open;
             MenuHud.RefreshNow();
             Audio.UpdateHum(World, open);
             if (open) Terminal.RefreshNow(); else CityHud.RefreshNow();
+        }
+
+        /// <summary>Photo mode: hide the interface (the city keeps running) and show the photo bar.</summary>
+        public void SetPhoto(bool on)
+        {
+            if (on && TerminalOpen) return;
+            Photo = on;
+            CityView.Photo = on;
+            if (!on) CityView.StopTour();
+            CityHud.gameObject.SetActive(!on && !TerminalOpen);
+            MenuHud.SetPhoto(on);
+            PhotoBar.gameObject.SetActive(on);
+            if (!on) CityHud.RefreshNow();
         }
 
         /// <summary>Re-apply settings (UI size, candle colours) to the running game.</summary>

@@ -27,6 +27,7 @@ namespace TradingEmpire.Core
         public Dictionary<string, JournalEntry> Journal = new Dictionary<string, JournalEntry>();
         /// <summary>Chart drawings per dataset id, kept exactly as saved.</summary>
         public List<KeyValuePair<string, List<Drawing>>> Drawings = new List<KeyValuePair<string, List<Drawing>>>();
+        public List<IndicatorConfig> Indicators = new List<IndicatorConfig>();
         public DatasetInfo Dataset;
         public long? DatasetTimeframeMs;
         public int? DatasetCount;
@@ -49,7 +50,7 @@ namespace TradingEmpire.Core
 
     /// <summary>
     /// Reads and writes the save format. It is the web version's format (version 4), so a save exported from the web game loads here
-    /// and the other way round; chart drawings and indicators are not used here, so they are dropped on load and saved empty.
+    /// and the other way round; chart drawings and indicators are saved and loaded as the web version stores them.
     /// </summary>
     public static class SaveCodec
     {
@@ -158,7 +159,7 @@ namespace TradingEmpire.Core
             var tradingObj = JsonValue.Obj()
                 .Set("account", JsonValue.Obj().Set("startingBalance", account.StartingBalance.Cents).Set("balance", account.Balance.Cents).Set("realizedPnl", account.RealizedPnl.Cents)
                     .Set("deposits", account.Deposits.Cents).Set("withdrawals", account.Withdrawals.Cents).Set("transactions", accTx).Set("open", open).Set("closed", closed))
-                .Set("runId", st.runId).Set("pending", pending).Set("drawings", DrawingsJson(world.Trading.Drawings)).Set("journal", journal).Set("chartTfMs", st.chartTfMs)
+                .Set("runId", st.runId).Set("pending", pending).Set("drawings", DrawingsJson(world.Trading.Drawings)).Set("indicators", IndicatorsJson(world.Trading.Indicators)).Set("journal", journal).Set("chartTfMs", st.chartTfMs)
                 .Set("replay", JsonValue.Obj().Set("revealed", st.revealed).Set("speed", st.speed)).Set("dataset", dataset);
 
             return JsonValue.Obj()
@@ -173,6 +174,38 @@ namespace TradingEmpire.Core
                 .Set("achievements", ach).Set("challenges", challenges)
                 .Set("progression", JsonValue.Obj().Set("completed", completed).Set("peakTreasury", world.Progression.PeakTreasury.Cents))
                 .Set("settings", JsonValue.Obj());
+        }
+
+        static JsonValue IndicatorsJson(IndicatorStore store)
+        {
+            var arr = JsonValue.Arr();
+            foreach (var c in store.Items)
+            {
+                var ps = JsonValue.Obj(); foreach (var kv in c.Params) ps.Set(kv.Key, kv.Value);
+                var o = JsonValue.Obj().Set("id", c.Id).Set("type", c.Type).Set("params", ps);
+                if (c.Colors.Count > 0) { var cs = JsonValue.Obj(); foreach (var kv in c.Colors) cs.Set(kv.Key, kv.Value); o.Set("colors", cs); }
+                if (c.Width.HasValue) o.Set("width", c.Width.Value);
+                if (c.Hidden) o.Set("hidden", true);
+                arr.Add(o);
+            }
+            return arr;
+        }
+
+        static void DecodeIndicators(JsonValue arr, List<IndicatorConfig> into)
+        {
+            if (arr == null || arr.Kind != JsonKind.Array) return;
+            foreach (var item in arr.Array)
+            {
+                if (item.Kind != JsonKind.Object || item.Get("id") == null || item.Get("id").Kind != JsonKind.String || item.Get("type") == null || item.Get("type").Kind != JsonKind.String) continue;
+                var c = new IndicatorConfig { Id = item.Get("id").String, Type = item.Get("type").String };
+                var ps = item.Get("params");
+                if (ps != null && ps.Kind == JsonKind.Object) foreach (var kv in ps.Members) if (kv.Value.Kind == JsonKind.Number) c.Params[kv.Key] = kv.Value.Number;
+                var cs = item.Get("colors");
+                if (cs != null && cs.Kind == JsonKind.Object) foreach (var kv in cs.Members) if (kv.Value.Kind == JsonKind.String) c.Colors[kv.Key] = kv.Value.String;
+                var w = item.Get("width"); if (w != null && w.Kind == JsonKind.Number) c.Width = w.Number;
+                var h = item.Get("hidden"); if (h != null && h.Kind == JsonKind.Bool) c.Hidden = h.Bool;
+                into.Add(c);
+            }
         }
 
         static JsonValue DrawingsJson(DrawingStore store)
@@ -427,6 +460,7 @@ namespace TradingEmpire.Core
                     }
                     d.Drawings.Add(new KeyValuePair<string, List<Drawing>>(S(g, "datasetId"), items));
                 }
+            DecodeIndicators(trading.Get("indicators"), d.Indicators);
             var journal = trading.Get("journal");
             if (journal != null && journal.Kind == JsonKind.Object)
                 foreach (var kv in journal.Members)
@@ -566,6 +600,7 @@ namespace TradingEmpire.Core
                 world.City.Restore(d.Buildings, d.Unlocked, d.LandTier, d.CityBalance, d.CityTransactions, d.Policies, d.Events, d.EventSeed);
                 var info = new DatasetInfo { Id = d.Dataset.Id, Name = d.Dataset.Name, Synthetic = d.Dataset.Synthetic, Symbol = d.Dataset.Symbol, Seed = d.Dataset.Seed, Total = candles.Count };
                 world.Trading.Restore(info, candles, d.ReplayRevealed, d.ReplaySpeed, d.RunId, d.Account, d.ChartTfMs, d.Journal, d.Drawings);
+                world.Trading.Indicators.Restore(d.Indicators);
                 world.Transfers.Restore(d.Transfers);
             })));
             world.Challenges.Restore(d.Challenges);

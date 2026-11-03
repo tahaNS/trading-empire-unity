@@ -322,11 +322,50 @@ namespace TradingEmpire.Terminal
 
         // ---------------------------------------------------------------- per frame
 
+        // fly-over: glide from building to building, resting at each, with a slow breathing zoom (any camera input stops it)
+        List<Vector3> _tour;
+        int _tourIndex;
+        float _tourT, _tourBaseZoom;
+        Vector3 _tourFrom;
+        /// <summary>Photo mode: the camera still moves but clicks no longer build or select.</summary>
+        public bool Photo;
+        public bool Touring { get { return _tour != null; } }
+
+        public void StartTour()
+        {
+            var pts = City.State.Buildings.Select(b => { var t = TopOf(b.Id); return new Vector3(t.x, 0, t.z); }).ToList();
+            if (pts.Count == 0) return;
+            float cx = pts.Average(q => q.x), cz = pts.Average(q => q.z);
+            pts.Sort((a, b) => Mathf.Atan2(a.z - cz, a.x - cx).CompareTo(Mathf.Atan2(b.z - cz, b.x - cx)));
+            int step = Mathf.Max(pts.Count / 8, 1);
+            _tour = pts.Where((q, i) => i % step == 0).ToList();
+            _tourIndex = 0; _tourT = 0; _tourFrom = _focus; _tourBaseZoom = _zoom;
+        }
+
+        public void StopTour() { _tour = null; }
+
+        void UpdateTour()
+        {
+            const float Move = 4f, Dwell = 2.5f;
+            bool input = Input.GetMouseButton(1) || Input.GetMouseButton(2) || Mathf.Abs(Input.mouseScrollDelta.y) > 0.01f
+                || Input.GetKey(KeyCode.W) || Input.GetKey(KeyCode.A) || Input.GetKey(KeyCode.S) || Input.GetKey(KeyCode.D)
+                || Input.GetKey(KeyCode.UpArrow) || Input.GetKey(KeyCode.DownArrow) || Input.GetKey(KeyCode.LeftArrow) || Input.GetKey(KeyCode.RightArrow);
+            if (input) { _tour = null; return; }
+            _tourT += Time.unscaledDeltaTime;
+            var to = _tour[_tourIndex];
+            float k = Mathf.Min(_tourT / Move, 1f), ease = k * k * (3f - 2f * k);
+            _focus = Vector3.Lerp(_tourFrom, to, ease);
+            _zoom = Mathf.Clamp(_tourBaseZoom * (1f - 0.18f * Mathf.Sin(Mathf.Min(_tourT / (Move + Dwell), 1f) * Mathf.PI)), 4f, 28f);
+            if (_tourT >= Move + Dwell) { _tourFrom = to; _tourIndex = (_tourIndex + 1) % _tour.Count; _tourT = 0; }
+            ApplyCamera();
+        }
+
         void Update()
         {
             if (City.State.LandTier != _landTierDrawn) RebuildLand();
-            if (_traffic != null) _traffic.Animate(Time.unscaledDeltaTime, City.Clock.Speed > 0 && Interactive);
-            if (Interactive) { HandleCamera(); HandleMouse(); }
+            if (_traffic != null) _traffic.Animate(Time.unscaledDeltaTime, City.Clock.Speed > 0 && (Interactive || Photo));
+            if (_tour != null) UpdateTour();
+            if (Interactive || Photo) { if (_tour == null) HandleCamera(); if (!Photo) HandleMouse(); }
             if (_dirty) Sync();
             else if (_views.Count > 0) ApplyScales(true);
         }

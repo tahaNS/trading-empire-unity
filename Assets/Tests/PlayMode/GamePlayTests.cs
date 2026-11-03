@@ -53,7 +53,7 @@ namespace TradingEmpire.PlayModeTests
             Assert.IsTrue(_app.CityHud.gameObject.activeInHierarchy);
             Assert.IsFalse(_app.Terminal.gameObject.activeInHierarchy);
 
-            Find("Terminal").onClick.Invoke();
+            Find("Open Terminal").onClick.Invoke();
             yield return null;
             Assert.IsTrue(_app.TerminalOpen);
             Assert.IsTrue(_app.Terminal.gameObject.activeInHierarchy);
@@ -122,6 +122,8 @@ namespace TradingEmpire.PlayModeTests
             for (int round = 0; round < 700; round++)
             {
                 var buttons = LiveButtons().Where(b => !skip.Any(s => LabelOf(b).StartsWith(s, StringComparison.Ordinal))).ToArray();
+                // the photo bar hides itself for the frame in which it takes a picture
+                if (buttons.Length == 0) { yield return null; buttons = LiveButtons().Where(b => !skip.Any(s => LabelOf(b).StartsWith(s, StringComparison.Ordinal))).ToArray(); }
                 Assert.Greater(buttons.Length, 0, "no clickable button left on screen (round " + round + ")");
                 var pick = buttons[rng.Next(buttons.Length)];
                 pick.onClick.Invoke();
@@ -156,7 +158,7 @@ namespace TradingEmpire.PlayModeTests
             _app = GameApp.Create(null, false, true);
             yield return null;
             _app.World.City.GrantFunds(Money.FromDollars(20_000));
-            Find("Menu").onClick.Invoke();
+            Find("Game").onClick.Invoke();
             yield return null;
             Assert.IsTrue(_app.MenuHud.Open);
             Assert.IsTrue(_app.Save(), _app.LastError);
@@ -179,7 +181,7 @@ namespace TradingEmpire.PlayModeTests
         {
             _app = GameApp.Create(null, false, true);
             yield return null;
-            Find("Terminal").onClick.Invoke();
+            Find("Open Terminal").onClick.Invoke();
             yield return null;
             Find("Challenges").onClick.Invoke();
             yield return null;
@@ -228,7 +230,8 @@ namespace TradingEmpire.PlayModeTests
             for (int i = 0; i < 3; i++) yield return null;
             _app.CityHud.transform.Find("TransferPanel").gameObject.SetActive(true);
             yield return null;
-            Assert.IsTrue(UiBlocksAt(ScreenCenterOf("TopBar")), "the top bar lets clicks through");
+            Assert.IsTrue(UiBlocksAt(ScreenCenterOf("TreasuryCard")), "the treasury card lets clicks through");
+            Assert.IsTrue(UiBlocksAt(ScreenCenterOf("DateCard")), "the date card lets clicks through");
             Assert.IsTrue(UiBlocksAt(ScreenCenterOf("BuildBar")), "the build bar lets clicks through");
             Assert.IsTrue(UiBlocksAt(ScreenCenterOf("Inspector")), "the inspector lets clicks through");
             Assert.IsTrue(UiBlocksAt(ScreenCenterOf("TransferPanel")), "the transfer panel lets clicks through");
@@ -305,7 +308,7 @@ namespace TradingEmpire.PlayModeTests
         {
             _app = GameApp.Create(null, false, true);
             yield return null;
-            Find("Terminal").onClick.Invoke();
+            Find("Open Terminal").onClick.Invoke();
             for (int i = 0; i < 3; i++) yield return null;
             var chart = _app.Terminal.Chart;
             var store = _app.World.Trading.Drawings;
@@ -389,7 +392,7 @@ namespace TradingEmpire.PlayModeTests
             Assert.Greater(audio.Played, before);
             // the UI click
             before = audio.Played;
-            Find("Menu").onClick.Invoke();
+            Find("Game").onClick.Invoke();
             Assert.Greater(audio.Played, before, "buttons should click");
             // muted: nothing plays
             audio.SetMuted(true);
@@ -407,7 +410,7 @@ namespace TradingEmpire.PlayModeTests
         {
             _app = GameApp.Create(null, false, true);
             yield return null;
-            Find("Menu").onClick.Invoke();
+            Find("Game").onClick.Invoke();
             yield return null;
             Find("Settings").onClick.Invoke();
             yield return null;
@@ -423,6 +426,67 @@ namespace TradingEmpire.PlayModeTests
             yield return null;
             Assert.IsFalse(Theme.ColorBlind);
             Assert.AreEqual(1600f, scaler.referenceResolution.x);
+        }
+        [UnityTest]
+        public IEnumerator Every_indicator_can_be_added_drawn_edited_hidden_and_removed()
+        {
+            _app = GameApp.Create(null, false, true);
+            yield return null;
+            Find("Open Terminal").onClick.Invoke();
+            yield return null;
+            for (int i = 0; i < 80; i++) _app.World.Trading.Step();
+            var chart = _app.Terminal.Chart;
+            Find("Indicators").onClick.Invoke();
+            yield return null;
+            Assert.IsTrue(chart.IndicatorWindow.Visible);
+            chart.IndicatorWindow.SelectTab(1);
+            yield return null;
+            foreach (var def in Indicators.All)
+            {
+                var add = Find(def.Name);
+                Assert.IsNotNull(add, "no Add button for " + def.Name);
+                add.onClick.Invoke();
+                yield return null;
+                chart.IndicatorWindow.SelectTab(1);
+                yield return null;
+            }
+            Assert.AreEqual(Math.Min(Indicators.All.Length, Indicators.MaxIndicators), _app.World.Trading.Indicators.Items.Count);
+            _app.Terminal.RefreshNow();
+            yield return null;
+            Assert.AreEqual(Indicators.MaxPanes, chart.Graphic.Panes.Count);
+            Assert.Greater(chart.Graphic.Overlays.Count, 0);
+            // hide the first, change a setting of the second, remove the third
+            var items = _app.World.Trading.Indicators.Items.ToList();
+            _app.World.Trading.Indicators.Update(items[0].Id, c => c.Hidden = true);
+            _app.World.Trading.Indicators.Update(items[1].Id, c => c.Params["period"] = 5);
+            _app.World.Trading.Indicators.Remove(items[2].Id);
+            yield return null;
+            _app.World.Trading.Indicators.Clear();
+            yield return null;
+            Assert.AreEqual(0, chart.Graphic.Panes.Count);
+        }
+
+        [UnityTest]
+        public IEnumerator Photo_mode_hides_the_interface_and_the_fly_over_moves_the_camera()
+        {
+            _app = GameApp.Create(null, false, true);
+            yield return null;
+            DemoCity.Populate(_app.World);
+            yield return null;
+            Find("Photo").onClick.Invoke();
+            yield return null;
+            Assert.IsTrue(_app.Photo);
+            Assert.IsFalse(_app.CityHud.gameObject.activeInHierarchy);
+            Assert.IsTrue(_app.PhotoBar.gameObject.activeInHierarchy);
+            var before = _app.CityView.Camera.transform.position;
+            Find("Fly over").onClick.Invoke();
+            Assert.IsTrue(_app.CityView.Touring);
+            for (int i = 0; i < 30; i++) yield return null;
+            Assert.AreNotEqual(before, _app.CityView.Camera.transform.position);
+            _app.SetPhoto(false);
+            yield return null;
+            Assert.IsFalse(_app.CityView.Touring);
+            Assert.IsTrue(_app.CityHud.gameObject.activeInHierarchy);
         }
     }
 }

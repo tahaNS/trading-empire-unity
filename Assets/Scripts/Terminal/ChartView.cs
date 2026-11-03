@@ -43,6 +43,9 @@ namespace TradingEmpire.Terminal
         readonly List<Text> _timeLabels = new List<Text>();
         readonly List<Text> _lineLabels = new List<Text>();
         readonly List<Text> _drawLabels = new List<Text>();
+        readonly List<Text> _indLabels = new List<Text>();
+        IndicatorPanel _indicatorPanel;
+        Button _indicatorButton;
         Text _empty, _hint;
         bool _hover;
 
@@ -84,6 +87,9 @@ namespace TradingEmpire.Terminal
             view._empty = Ui.Label(rt, "No data loaded", 18, Theme.Dim, TextAnchor.MiddleCenter);
             view.BuildToolStrip();
             view.BuildProps();
+            view._indicatorPanel = IndicatorPanel.Create(rt);
+            view._indicatorButton = Ui.Button(rt, "Indicators", () => view._indicatorPanel.Toggle(), Theme.PanelAlt, 11);
+            Ui.Place((RectTransform)view._indicatorButton.transform, new Vector2(1, 1), new Vector2(1, 1), new Vector2(-250, -26), new Vector2(-138, -4));
             return view;
         }
 
@@ -95,16 +101,25 @@ namespace TradingEmpire.Terminal
         /// <summary>Show the drawings of this trading session (called again when a challenge swaps the session).</summary>
         public void Bind(TradingSession session)
         {
-            if (_session != null) _session.Drawings.Changed -= OnDrawingsChanged;
+            if (_session != null) { _session.Drawings.Changed -= OnDrawingsChanged; _session.Indicators.Changed -= OnIndicatorsChanged; }
             _session = session;
             _session.Drawings.Changed += OnDrawingsChanged;
+            _session.Indicators.Changed += OnIndicatorsChanged;
+            if (_indicatorPanel != null) _indicatorPanel.Bind(session);
             _tool = null;
             _pending.Clear();
             _selectedId = null;
             _propsDirty = true;
         }
 
-        void OnDestroy() { if (_session != null) _session.Drawings.Changed -= OnDrawingsChanged; }
+        void OnDestroy() { if (_session != null) { _session.Drawings.Changed -= OnDrawingsChanged; _session.Indicators.Changed -= OnIndicatorsChanged; } }
+        void OnIndicatorsChanged() { if (_data != null) Refresh(_data); RefreshIndicatorButton(); }
+        void RefreshIndicatorButton()
+        {
+            int n = _session != null ? _session.Indicators.Items.Count : 0;
+            Ui.SetButtonLabel(_indicatorButton, n > 0 ? "Indicators (" + n + ")" : "Indicators");
+            Ui.SetButtonColor(_indicatorButton, n > 0 ? Theme.Blue : Theme.PanelAlt);
+        }
         void OnDrawingsChanged() { _propsDirty = true; }
 
         // ---------------------------------------------------------------- tool strip and properties bar
@@ -402,9 +417,31 @@ namespace TradingEmpire.Terminal
             g.TfMs = d.TfMs;
             g.Markers = d.Markers;
             g.Lines = BuildLines(d);
+            ComputeIndicators(d);
             g.SetVerticesDirty();
             LayoutLabels();
             if (_propsDirty) RefreshProps();
+        }
+
+        /// <summary>Indicators are computed over the revealed bars only (the last 2000 of them: older bars no longer change the values).</summary>
+        void ComputeIndicators(ChartData d)
+        {
+            var g = _graphic;
+            g.Overlays = new List<ComputedIndicator>();
+            g.Panes = new List<ComputedIndicator>();
+            g.IndOffset = 0;
+            if (_session == null || _session.Indicators.Items.Count == 0 || d.Candles.Count == 0) return;
+            int start = Math.Max(0, d.Candles.Count - 2000);
+            IReadOnlyList<Candle> bars = start == 0 ? d.Candles : d.Candles.Skip(start).ToList();
+            g.IndOffset = start;
+            foreach (var cfg in _session.Indicators.Items)
+            {
+                if (cfg.Hidden) continue;
+                var c = Indicators.Compute(cfg, bars);
+                if (c == null) continue;
+                if (c.Def.Overlay) g.Overlays.Add(c);
+                else if (g.Panes.Count < Indicators.MaxPanes) g.Panes.Add(c);
+            }
         }
 
         static List<ChartLine> BuildLines(ChartData d)
@@ -456,6 +493,7 @@ namespace TradingEmpire.Terminal
             foreach (var t in _timeLabels) t.gameObject.SetActive(false);
             foreach (var t in _lineLabels) t.gameObject.SetActive(false);
             foreach (var t in _drawLabels) t.gameObject.SetActive(false);
+            foreach (var t in _indLabels) t.gameObject.SetActive(false);
             BuildScene();
             g.SetVerticesDirty();
             if (g.Count == 0) return;
@@ -476,7 +514,7 @@ namespace TradingEmpire.Terminal
                 if (i % every != 0) continue;
                 var t = Pooled(_timeLabels, k++, 12, Theme.Dim);
                 t.alignment = TextAnchor.MiddleCenter;
-                Pos(t, g.XOfIndex(i) - 40, g.Plot.yMin - 14, 80, 14);
+                Pos(t, g.XOfIndex(i) - 40, g.AxisY - 14, 80, 14);
                 t.text = FormatTime(g.Bars[i].Time, g.TfMs);
             }
 
@@ -490,6 +528,8 @@ namespace TradingEmpire.Terminal
                 t.text = l.Label;
             }
 
+            LayoutIndicatorLabels(g);
+
             if (g.Scene != null)
             {
                 int dl = 0;
@@ -500,6 +540,51 @@ namespace TradingEmpire.Terminal
                     t.alignment = TextAnchor.MiddleLeft;
                     Pos(t, lb.At.x, lb.At.y, Mathf.Max(60, lb.Text.Length * 7 + 8), 14);
                     t.text = lb.Text;
+                }
+            }
+        }
+
+        static string Num(double v, IndicatorDef def, int pipPoints)
+        {
+            if (double.IsNaN(v)) return "-";
+            if (def.Id == "macd" || def.Id == "atr") return (v / Math.Max(1, pipPoints)).ToString("0.0", CultureInfo.InvariantCulture);
+            if (def.Id == "volume") return v >= 1000 ? (v / 1000).ToString("0.#", CultureInfo.InvariantCulture) + "k" : v.ToString("0", CultureInfo.InvariantCulture);
+            return v.ToString("0.00", CultureInfo.InvariantCulture);
+        }
+
+        void LayoutIndicatorLabels(CandleGraphic g)
+        {
+            int n = 0;
+            int pip = _data != null ? _data.PipPoints : 10;
+            float y = g.Plot.yMax - 36;
+            foreach (var ind in g.Overlays)
+            {
+                var t = Pooled(_indLabels, n++, 11, Theme.Text);
+                var sb = new System.Text.StringBuilder(Indicators.Label(ind.Config));
+                foreach (var l in ind.Lines)
+                {
+                    double v = g.LastValue(l);
+                    sb.Append("  <color=").Append(l.Color).Append(">").Append(double.IsNaN(v) ? "-" : Units.FormatPrice((long)Math.Round(v), g.Digits)).Append("</color>");
+                }
+                t.text = sb.ToString();
+                Pos(t, g.Plot.xMin + 8, y, 380, 14);
+                y -= 15;
+            }
+            for (int k = 0; k < g.Panes.Count; k++)
+            {
+                var ind = g.Panes[k];
+                var r = g.PaneRect(k);
+                var t = Pooled(_indLabels, n++, 11, Theme.Text);
+                var sb = new System.Text.StringBuilder(Indicators.Label(ind.Config));
+                foreach (var l in ind.Lines) sb.Append("  <color=").Append(l.Color).Append(">").Append(Num(g.LastValue(l), ind.Def, pip)).Append("</color>");
+                t.text = sb.ToString();
+                Pos(t, r.xMin + 6, r.yMax - 8, 380, 14);
+                double lo, hi; g.PaneRange(ind, out lo, out hi);
+                foreach (double gd in ind.Def.Guides)
+                {
+                    var gt = Pooled(_indLabels, n++, 10, Theme.Dim);
+                    gt.text = gd.ToString("0.#", CultureInfo.InvariantCulture);
+                    Pos(gt, g.Plot.xMax + 6, r.yMin + (float)((gd - lo) / (hi - lo)) * r.height, 60, 12);
                 }
             }
         }
@@ -521,6 +606,7 @@ namespace TradingEmpire.Terminal
                 rt.anchorMin = rt.anchorMax = new Vector2(0.5f, 0.5f);
                 rt.pivot = new Vector2(0, 0);
                 pool.Add(t);
+                if (_indicatorPanel != null) t.transform.SetSiblingIndex(_indicatorPanel.transform.GetSiblingIndex()); // keep labels under the indicator window
             }
             t.color = color;
             t.alignment = TextAnchor.MiddleLeft;
@@ -538,5 +624,6 @@ namespace TradingEmpire.Terminal
 
         // for tests and tools
         public CandleGraphic Graphic { get { return _graphic; } }
+        public IndicatorPanel IndicatorWindow { get { return _indicatorPanel; } }
     }
 }

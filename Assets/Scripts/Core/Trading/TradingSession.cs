@@ -106,6 +106,8 @@ namespace TradingEmpire.Core
         public readonly JournalStore Journal = new JournalStore();
         /// <summary>Chart drawings, per dataset (saved with the game).</summary>
         public readonly DrawingStore Drawings = new DrawingStore();
+        /// <summary>Technical indicators shown on the chart (saved with the game).</summary>
+        public readonly IndicatorStore Indicators = new IndicatorStore();
         /// <summary>Raised after any change to <see cref="State"/>.</summary>
         public event Action Changed;
         public SessionState State { get; private set; }

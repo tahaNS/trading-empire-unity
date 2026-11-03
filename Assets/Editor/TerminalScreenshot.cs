@@ -77,10 +77,17 @@ namespace TradingEmpire.EditorTools
             hud.transform.Find("TransferPanel").gameObject.SetActive(true);
             Shot(app, cam, rt, prefix + "-city-panels.png");
 
+            hud.transform.Find("TransferPanel").gameObject.SetActive(false);
+            hud.transform.Find("PolicyPanel").gameObject.SetActive(true);
+            Shot(app, cam, rt, prefix + "-city-policies.png");
+            hud.transform.Find("PolicyPanel").gameObject.SetActive(false);
+
             // the menu with the missions
             app.MenuHud.Show(true);
             app.MenuHud.SelectTab(1);
             Shot(app, cam, rt, prefix + "-menu.png");
+            app.MenuHud.SelectTab(4);
+            Shot(app, cam, rt, prefix + "-menu-help.png");
             app.MenuHud.SelectTab(0);
             Shot(app, cam, rt, prefix + "-menu-game.png");
             app.MenuHud.Show(false);
@@ -110,6 +117,18 @@ namespace TradingEmpire.EditorTools
                 app.Terminal.Chart.Select(trendId);
             }
             Shot(app, cam, rt, prefix + "-terminal.png");
+
+            // indicators: a moving average and Bollinger bands over the candles, RSI and MACD in strips, with the window open
+            s.Drawings.Clear();
+            s.Indicators.Add("ema"); s.Indicators.Add("bb"); s.Indicators.Add("rsi"); s.Indicators.Add("macd");
+            app.Terminal.Chart.IndicatorWindow.Show(true);
+            app.Terminal.Chart.IndicatorWindow.RefreshNow();
+            Shot(app, cam, rt, prefix + "-indicators.png");
+            app.Terminal.Chart.IndicatorWindow.SelectTab(1);
+            app.Terminal.Chart.IndicatorWindow.RefreshNow();
+            Shot(app, cam, rt, prefix + "-indicators-add.png");
+            app.Terminal.Chart.IndicatorWindow.Show(false);
+            s.Indicators.Clear();
 
             // the journal: close the trade and write about it
             s.CloseAll();

@@ -25,7 +25,10 @@ namespace TradingEmpire.Terminal
         int _tab;
         bool _dirty = true;
 
-        static readonly string[] TabNames = { "Game", "Missions", "Achievements", "Settings" };
+        static readonly string[] TabNames = { "Game", "Missions", "Achievements", "Settings", "Help" };
+        bool _photo;
+        /// <summary>Photo mode hides the goal card with the rest of the interface.</summary>
+        public void SetPhoto(bool on) { _photo = on; _dirty = true; }
 
         public static MenuHud Build(Transform canvas, GameApp app)
         {
@@ -92,9 +95,9 @@ namespace TradingEmpire.Terminal
             {
                 int index = i;
                 var b = Ui.Pill(win, TabNames[i], () => { _tab = index; _dirty = true; }, false, 12);
-                Ui.Place((RectTransform)b.transform, new Vector2(0, 1), new Vector2(0, 1), new Vector2(x, -72), new Vector2(x + 130, -44));
+                Ui.Place((RectTransform)b.transform, new Vector2(0, 1), new Vector2(0, 1), new Vector2(x, -72), new Vector2(x + 118, -44));
                 _tabs.Add(b);
-                x += 136;
+                x += 124;
             }
             _content = Ui.Rect(win, "Content");
             Ui.Place(_content, Vector2.zero, Vector2.one, new Vector2(18, 40), new Vector2(-18, -82));
@@ -160,13 +163,14 @@ namespace TradingEmpire.Terminal
             if (_tab == 0) GameTab();
             else if (_tab == 1) MissionsTab();
             else if (_tab == 2) AchievementsTab();
-            else SettingsTab();
+            else if (_tab == 3) SettingsTab();
+            else HelpTab();
         }
 
         void RefreshGoal()
         {
             var goal = Progress.NextGoalOf(World.Progression.Completed, World.Progression.Stats);
-            _goal.gameObject.SetActive(goal != null && !_app.TerminalOpen);
+            _goal.gameObject.SetActive(goal != null && !_app.TerminalOpen && !_photo);
             if (goal == null) return;
             var m = goal.Mission;
             _goalTitle.text = "GOAL  —  " + m.Title;
@@ -282,6 +286,16 @@ namespace TradingEmpire.Terminal
             var tip = Ui.Label(_content, "Keys:  Space play or pause the market,  Right arrow next candle,  Shift+Right next bar,  L / S long or short,  mouse wheel zoom,  R rotate a building,  Esc cancel or back.", 12, Theme.Muted, TextAnchor.UpperLeft);
             tip.horizontalOverflow = HorizontalWrapMode.Wrap;
             Ui.Place(tip.rectTransform, new Vector2(0, 1), new Vector2(1, 1), new Vector2(0, -y - 80), new Vector2(0, -y)); _dynamic.Add(tip.gameObject);
+        }
+
+        void HelpTab()
+        {
+            _body.text =
+                "<b>The idea</b>\nTrade real historical forex in the terminal. Profit moves into the city treasury (Finances > To city), where it builds and upgrades buildings that earn rent. Your trading record changes the city too: a winning streak starts a boom, a losing one a panic.\n\n"
+                + "<b>The city</b>\nPick a building in the build bar, click the map to place it (R rotates, Esc cancels). Click a building to upgrade or demolish it. Buy land when you run out of room. Policies trade income against upkeep; some unlock by winning challenges.\n\n"
+                + "<b>The terminal</b>\nPlay or step the market, then buy or sell with a stop-loss and take-profit. Only candles already revealed are shown: no peeking ahead. When a stop and a target are both hit in one candle, the stop-loss counts first. Use the tools on the left to draw, and Indicators (top right of the chart) for moving averages, RSI, MACD and more.\n\n"
+                + "<b>Keys</b>\nSpace play or pause the market,  Right arrow next candle,  Shift+Right next bar,  L / S long or short,  mouse wheel zoom,  W A S D or arrows and right-drag move the city camera,  R rotate a building,  Esc cancel or back.\n\n"
+                + "<b>Photo mode</b>\nThe Photo button hides the interface: save a screenshot (to Pictures/Trading Empire) or start a slow fly-over of the city. Esc leaves.";
         }
 
         void Report(string text) { _message.text = text ?? ""; _dirty = true; }

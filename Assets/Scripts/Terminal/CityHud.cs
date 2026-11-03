@@ -16,7 +16,12 @@ namespace TradingEmpire.Terminal
     {
         GameWorld _world;
         CityGame City { get { return _world.City; } }
-        Action _openTerminal, _openMenu;
+        Action _openTerminal;
+        Action<int> _openMenu;
+        /// <summary>Set by the app after building: photo mode, sound on/off, and whether sound is off.</summary>
+        public Action OnPhoto, OnSound;
+        public Func<bool> IsMuted;
+        Button _soundButton;
 
         Text _date, _treasury, _net, _chips, _toast;
         readonly List<Button> _speedButtons = new List<Button>();
@@ -40,7 +45,7 @@ namespace TradingEmpire.Terminal
         int _lastPayoutSeq;
         const float FloatSeconds = 1.8f;
 
-        public static CityHud Build(Transform canvas, GameWorld world, Action openTerminal, Action openMenu = null)
+        public static CityHud Build(Transform canvas, GameWorld world, Action openTerminal, Action<int> openMenu = null)
         {
             var root = Ui.Rect(canvas, "CityHud");
             Ui.Stretch(root);
@@ -114,11 +119,17 @@ namespace TradingEmpire.Terminal
             Ui.Place(row, new Vector2(0, 1), new Vector2(1, 1), new Vector2(920, -52), new Vector2(-12, -12));
             float rx = 0;
             AddRight(row, "Open Terminal", ref rx, 140, () => _openTerminal(), true);
-            if (_openMenu != null) AddRight(row, "Game", ref rx, 64, () => _openMenu());
+            AddRight(row, "?", ref rx, 34, () => { if (_openMenu != null) _openMenu(4); });
+            AddRight(row, "Photo", ref rx, 62, () => { if (OnPhoto != null) OnPhoto(); });
+            _soundButton = AddRight(row, "Sound", ref rx, 62, () => { if (OnSound != null) OnSound(); _dirty = true; });
+            if (_openMenu != null) AddRight(row, "Game", ref rx, 64, () => _openMenu(0));
             AddRight(row, "Policies", ref rx, 84, () => Toggle(_policyPanel, _transferPanel));
-            if (_openMenu != null) AddRight(row, "Progress", ref rx, 84, () => _openMenu());
+            if (_openMenu != null) AddRight(row, "Progress", ref rx, 84, () => _openMenu(1));
             AddRight(row, "Finances", ref rx, 84, () => Toggle(_transferPanel, _policyPanel));
-            _landButton = AddRight(row, "Buy land", ref rx, 176, () => City.ExpandLand());
+            var landRow = Ui.Rect(root, "LandRow");
+            Ui.Place(landRow, new Vector2(0, 1), new Vector2(1, 1), new Vector2(920, -92), new Vector2(-12, -58));
+            float lx = 0;
+            _landButton = AddRight(landRow, "Buy land", ref lx, 210, () => City.ExpandLand());
 
             BuildBuildBar(root);
             BuildInspector(root);
@@ -171,7 +182,7 @@ namespace TradingEmpire.Terminal
         void BuildInspector(RectTransform root)
         {
             _inspector = Ui.Card(root, "Inspector", 12f).rectTransform;
-            Ui.Place(_inspector, new Vector2(1, 0), new Vector2(1, 1), new Vector2(-340, 108), new Vector2(-12, -64));
+            Ui.Place(_inspector, new Vector2(1, 0), new Vector2(1, 1), new Vector2(-340, 108), new Vector2(-12, -102));
             _inspectorTitle = Ui.Label(_inspector, "", 17, Theme.Ink, TextAnchor.MiddleLeft, false, true);
             Ui.Place(_inspectorTitle.rectTransform, new Vector2(0, 1), Vector2.one, new Vector2(16, -40), new Vector2(-16, -8));
             _inspectorBody = Ui.Label(_inspector, "", 12, Theme.Ink, TextAnchor.UpperLeft, true);
@@ -309,6 +320,7 @@ namespace TradingEmpire.Terminal
             _date.text = DateTimeOffset.FromUnixTimeMilliseconds(_world.Clock.Time).UtcDateTime.ToString("ddd d MMM yyyy", CultureInfo.InvariantCulture).ToUpperInvariant();
             for (int i = 0; i < _speedButtons.Count; i++) { bool on = GameClock.Speeds[i] == _world.Clock.Speed; Style(_speedButtons[i], on ? Theme.Primary : Color.clear, on ? Color.white : Theme.Ink); }
 
+            if (_soundButton != null) Ui.SetButtonLabel(_soundButton, IsMuted != null && IsMuted() ? "Muted" : "Sound");
             _treasury.text = s.Balance.ToString();
             _treasury.color = s.Balance.Cents < 0 ? Theme.Bad : Theme.Ink;
             var proj = CityEconomy.ProjectedNetPer30Days(s.Buildings, false, City.Context());
