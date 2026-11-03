@@ -412,6 +412,36 @@ namespace TradingEmpire.Core
 
         int LastIndex() { return Math.Max((_replay != null ? _replay.Revealed.Count : 1) - 1, 0); }
 
+        // ---------- capital transfers (used by CapitalTransferService only) ----------
+
+        /// <summary>Realized funds that may be moved to the city: min(balance, free margin), never negative.</summary>
+        public Money EligibleForTransfer()
+        {
+            var v = _engine.View();
+            var m = Money.Min(v.Balance, v.FreeMargin);
+            return m.Cents > 0 ? m : Money.Zero;
+        }
+
+        /// <summary>Part of an atomic transfer: mutates the account WITHOUT notifying observers.</summary>
+        public bool ApplyTransferOut(Money amount, long time, string memo)
+        {
+            if (amount > EligibleForTransfer()) return false;
+            return Account.Withdraw(amount, time, memo);
+        }
+
+        /// <summary>Part of an atomic transfer FROM the city: deposits into the account WITHOUT notifying observers.</summary>
+        public void ApplyTransferIn(Money amount, long time, string memo) { Account.Deposit(amount, time, memo); }
+
+        /// <summary>Margin needed to open the smallest possible trade at the current price.</summary>
+        public Money MinimumTradeMargin()
+        {
+            var inst = Instrument;
+            long price = _engine.Quote != null ? _engine.Quote.Ask : (long)Math.Round(1.1 * Math.Pow(10, inst.Digits));
+            return Pnl.MarginFor(inst, inst.MinLots, price, Leverage);
+        }
+
+        public void Publish() { Patch(null); }
+
         /// <summary>Test tools only (god mode): add money to the trading account.</summary>
         public void GrantFunds(Money amount)
         {
