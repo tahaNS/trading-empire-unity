@@ -13,6 +13,8 @@ namespace TradingEmpire.Terminal
         public Color Color;
         public bool Dashed;
         public string Label;
+        /// <summary>"sl", "tp" or "entry" for the lines of the order being planned (they can be dragged), else null.</summary>
+        public string Tag;
     }
 
     /// <summary>
@@ -35,6 +37,8 @@ namespace TradingEmpire.Terminal
         public List<ComputedIndicator> Overlays = new List<ComputedIndicator>();
         public List<ComputedIndicator> Panes = new List<ComputedIndicator>();
         public int IndOffset;
+        /// <summary>Keep the current price range (set while dragging a plan line).</summary>
+        public bool Freeze;
         public const float PaneH = 86f, PaneGap = 4f;
         /// <summary>Bottom of the plot area including the strips: where the time labels go.</summary>
         public float AxisY;
@@ -106,6 +110,8 @@ namespace TradingEmpire.Terminal
             FirstIndex = total - Count;
             Step = Plot.width / visible;
 
+            // while a plan line is being dragged the price range stays put, so the line does not run away from the pointer
+            if (Freeze && Hi > Lo) return;
             long lo = long.MaxValue, hi = long.MinValue;
             for (int i = FirstIndex; i < total; i++) { lo = Math.Min(lo, Bars[i].Low); hi = Math.Max(hi, Bars[i].High); }
             foreach (var l in Lines) { if (l.Price > 0) { lo = Math.Min(lo, l.Price); hi = Math.Max(hi, l.Price); } }

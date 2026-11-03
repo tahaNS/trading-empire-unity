@@ -68,6 +68,9 @@ namespace TradingEmpire.PlayModeTests
 
             Find("LONG").onClick.Invoke();
             yield return null;
+            Assert.IsNotNull(_app.World.Trading.Draft);
+            Find("Place order").onClick.Invoke();
+            yield return null;
             Assert.AreEqual(1, _app.World.Trading.State.Positions.Count);
             Find("Close all").onClick.Invoke();
             yield return null;
@@ -509,6 +512,64 @@ namespace TradingEmpire.PlayModeTests
             _app.Tutorial.Tutorial.Dismiss();
             _app.Tutorial.Refresh();
             Assert.IsFalse(_app.Tutorial.gameObject.transform.Find("Card").gameObject.activeSelf);
+        }
+
+        [UnityTest]
+        public IEnumerator A_trade_is_planned_dragged_and_placed_through_the_order_panel_and_chart()
+        {
+            _app = GameApp.Create(null, false, true);
+            yield return null;
+            Find("Open Terminal").onClick.Invoke();
+            yield return null;
+            for (int i = 0; i < 5; i++) _app.World.Trading.Step();
+            yield return null;
+            var s = _app.World.Trading;
+            Find("LONG").onClick.Invoke();
+            yield return null;
+            Assert.IsNotNull(s.Draft);
+            // the plan's lines are on the chart and the SL line can be dragged with pointer events
+            var chart = _app.Terminal.Chart;
+            _app.Terminal.RefreshNow();
+            var sl = chart.Graphic.Lines.First(l => l.Tag == "sl");
+            long before = s.Draft.StopLoss;
+            chart.PointerDown(new Vector2(chart.Graphic.Plot.center.x, chart.Graphic.YOf(sl.Price)));
+            chart.PointerDrag(new Vector2(chart.Graphic.Plot.center.x, chart.Graphic.YOf(sl.Price) + 25f));
+            chart.PointerUp(Vector2.zero);
+            Assert.AreNotEqual(before, s.Draft.StopLoss);
+            // the panel can change the size mode, then place the order
+            Find("Risk %").onClick.Invoke();
+            yield return null;
+            Assert.IsFalse(s.Draft.RiskSizing);
+            Find("Place order").onClick.Invoke();
+            yield return null;
+            Assert.IsNull(s.Draft);
+            Assert.AreEqual(1, s.State.Positions.Count);
+        }
+
+        [UnityTest]
+        public IEnumerator The_object_tree_lists_hides_locks_reorders_and_deletes_drawings()
+        {
+            _app = GameApp.Create(null, false, true);
+            yield return null;
+            Find("Open Terminal").onClick.Invoke();
+            yield return null;
+            for (int i = 0; i < 20; i++) _app.World.Trading.Step();
+            var ds = _app.World.Trading.Drawings;
+            ds.Add(DrawingKinds.HLine(110000, "#f2c25b"));
+            ds.Add(DrawingKinds.HLine(110200, "#6ea8ff"));
+            Find("Objects").onClick.Invoke();
+            yield return null;
+            Assert.IsTrue(_app.Terminal.Chart.ObjectWindow.Visible);
+            var first = ds.Items[0].Id;
+            Find("Hide all").onClick.Invoke();
+            yield return null;
+            Assert.IsTrue(ds.Items.All(d => d.Hidden));
+            Find("Show all").onClick.Invoke();
+            yield return null;
+            Assert.IsTrue(ds.Items.All(d => !d.Hidden));
+            Find("Delete all").onClick.Invoke();
+            yield return null;
+            Assert.AreEqual(0, ds.Items.Count);
         }
     }
 }

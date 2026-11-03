@@ -151,6 +151,7 @@ namespace TradingEmpire.Core
         public void LoadDataset(IReadOnlyList<Candle> candles, string name, bool synthetic, LoadReport report = null, uint? seed = null, string symbol = null)
         {
             CloseAllInternal();
+            Draft = null;
             UseInstrument(Instruments.Find(symbol) ?? Instruments.EURUSD);
             if (_replay != null) _replay.Pause();
             _candles = candles.ToList();
@@ -244,6 +245,7 @@ namespace TradingEmpire.Core
             long? chartTfMs = null, IReadOnlyDictionary<string, JournalEntry> journal = null, IEnumerable<KeyValuePair<string, List<Drawing>>> drawings = null)
         {
             if (_replay != null) _replay.Pause();
+            Draft = null;
             UseInstrument(Instruments.Find(dataset.Symbol) ?? Instruments.EURUSD);
             _candles = candles.ToList();
             _timeframeMs = DetectTimeframe(candles);
@@ -277,6 +279,7 @@ namespace TradingEmpire.Core
         {
             if (_replay == null) return;
             bool hadOpen = Account.Open.Count > 0;
+            Draft = null;
             CloseAllInternal();
             _runId++;
             StartReplay();
@@ -347,6 +350,56 @@ namespace TradingEmpire.Core
                 Notify(x.Net.Cents >= 0 ? NoticeKind.Success : NoticeKind.Error,
                     what + ": " + (p.Direction == Direction.Buy ? "buy" : "sell") + " " + Units.FormatLots(p.Lots) + " " + x.Net.ToSignedString());
             }
+        }
+
+        // ---------- the order draft ----------
+
+        /// <summary>The order being planned on the chart and in the order panel (null when none).</summary>
+        public OrderDraft Draft { get; private set; }
+
+        public void StartDraft(Direction direction)
+        {
+            var q = _engine.Quote;
+            if (q == null) { Notify(NoticeKind.Error, "No market price yet."); return; }
+            Draft = Drafts.Create(Instrument, direction, q, Draft);
+            Patch(null);
+        }
+
+        public void CancelDraft() { if (Draft == null) return; Draft = null; Patch(null); }
+
+        /// <summary>Change the draft (the entry, when set, is normalised: close to the market it becomes a market order).</summary>
+        public void UpdateDraft(Action<OrderDraft> change)
+        {
+            if (Draft == null) return;
+            var next = Draft.Copy();
+            change(next);
+            var q = _engine.Quote;
+            if (q != null && next.Entry.HasValue) next.Entry = Drafts.NormalizeEntry(Instrument, next.Direction, next.Entry.Value, q);
+            Draft = next;
+            Patch(null);
+        }
+
+        /// <summary>The draft with its size, the engine's preview (risk, reward, margin) and any reason it would be refused.</summary>
+        public DraftView DescribeDraft()
+        {
+            var q = _engine.Quote;
+            if (Draft == null || q == null) return null;
+            var res = Drafts.Resolve(Draft, Instrument, q, _engine.View().Balance);
+            var preview = res.Order != null ? _engine.Preview(res.Order) : null;
+            string rejection = preview != null && preview.Rejections.Count > 0 ? preview.Rejections[0].Message : null;
+            return new DraftView { Draft = Draft, Resolution = res, Preview = preview, Rejection = rejection };
+        }
+
+        /// <summary>Place the drafted order (market or pending). The draft stays open if it is refused.</summary>
+        public bool SubmitDraft()
+        {
+            var view = DescribeDraft();
+            if (view == null) return false;
+            if (view.Resolution.Order == null) { Notify(NoticeKind.Error, view.Resolution.Issue ?? "The order is not valid yet."); return false; }
+            if (!PlaceOrder(view.Resolution.Order)) return false;
+            Draft = null;
+            Patch(null);
+            return true;
         }
 
         // ---------- trading ----------

@@ -115,6 +115,7 @@ namespace TradingEmpire.Terminal
             BuildBottomPanel(bottom);
 
             BuildToast(root);
+            _guide = TerminalGuide.Build(root, () => { if (StartTutorial != null) StartTutorial(); });
             BuildLoadPopover(root);
             BuildChallengeUi(root);
         }
@@ -153,11 +154,13 @@ namespace TradingEmpire.Terminal
                 var ch = Ui.Button(bar, "Challenges", () => ToggleChallengeList(true), Theme.PanelAlt, 12);
                 Ui.Place((RectTransform)ch.transform, new Vector2(1, 1), new Vector2(1, 1), new Vector2(-390, -28), new Vector2(-270, -6));
             }
+            var guideBtn = Ui.Button(bar, "Guide", () => _guide.Show(true), Theme.PanelAlt, 12);
+            Ui.Place((RectTransform)guideBtn.transform, new Vector2(1, 1), new Vector2(1, 1), new Vector2(-460, -28), new Vector2(-398, -6));
             var load = Ui.Button(bar, "Load data...", () => _loadPopover.gameObject.SetActive(!_loadPopover.gameObject.activeSelf), Theme.PanelAlt, 12);
             Ui.Place((RectTransform)load.transform, new Vector2(1, 1), new Vector2(1, 1), new Vector2(-120, -28), new Vector2(-10, -6));
 
             _progress = Ui.Label(bar, "", 12, Theme.Dim, TextAnchor.MiddleRight, true);
-            Ui.Place(_progress.rectTransform, new Vector2(1, 1), new Vector2(1, 1), new Vector2(-690, -30), new Vector2(-400, -4));
+            Ui.Place(_progress.rectTransform, new Vector2(1, 1), new Vector2(1, 1), new Vector2(-760, -30), new Vector2(-470, -4));
 
             // row 2: replay controls + timeframes
             float x = 12;
@@ -217,16 +220,146 @@ namespace TradingEmpire.Terminal
             var oh = Ui.Label(order, "ORDER", 12, Theme.Accent, TextAnchor.MiddleLeft, false, true);
             Ui.Place(oh.rectTransform, new Vector2(0, 1), new Vector2(1, 1), new Vector2(12, -26), new Vector2(-12, -4));
 
-            _lots = FieldRow(order, "Lots", "0.10", 0);
-            _sl = FieldRow(order, "Stop-loss (pips)", "20", 1);
-            _tp = FieldRow(order, "Take-profit (pips)", "40", 2);
+            // no plan yet: Long / Short start one
+            _orderStart = Ui.Rect(order, "Start");
+            Ui.Stretch(_orderStart, 0, 44, 0, 28);
+            var longBtn = Ui.Button(_orderStart, "LONG  (L)", () => Session.StartDraft(Direction.Buy), new Color(0.1f, 0.5f, 0.4f), 15);
+            Ui.Place((RectTransform)longBtn.transform, new Vector2(0, 1), new Vector2(0.5f, 1), new Vector2(12, -50), new Vector2(-4, -8));
+            var shortBtn = Ui.Button(_orderStart, "SHORT  (S)", () => Session.StartDraft(Direction.Sell), new Color(0.65f, 0.2f, 0.24f), 15);
+            Ui.Place((RectTransform)shortBtn.transform, new Vector2(0.5f, 1), Vector2.one, new Vector2(4, -50), new Vector2(-12, -8));
+            var note = Ui.Label(_orderStart, "Plan a trade: three lines appear on the chart (entry, stop-loss, take-profit) that you can drag. Drag the entry away from the price to place a limit or stop order instead of a market order.", 11, Theme.Dim, TextAnchor.UpperLeft);
+            note.horizontalOverflow = HorizontalWrapMode.Wrap;
+            Ui.Place(note.rectTransform, Vector2.zero, Vector2.one, new Vector2(12, 4), new Vector2(-12, -62));
 
-            var longBtn = Ui.Button(order, "LONG  (L)", () => Submit(Direction.Buy), new Color(0.1f, 0.5f, 0.4f), 15);
-            Ui.Place((RectTransform)longBtn.transform, new Vector2(0, 0), new Vector2(0.5f, 0), new Vector2(12, 46), new Vector2(-4, 88));
-            var shortBtn = Ui.Button(order, "SHORT  (S)", () => Submit(Direction.Sell), new Color(0.65f, 0.2f, 0.24f), 15);
-            Ui.Place((RectTransform)shortBtn.transform, new Vector2(0.5f, 0), new Vector2(1, 0), new Vector2(4, 46), new Vector2(-12, 88));
+            // a plan is open: its fields, what it would cost, and Place order
+            _orderDraft = Ui.Rect(order, "Draft");
+            Ui.Stretch(_orderDraft, 0, 44, 0, 28);
+            _draftTitle = Ui.Label(order, "", 12, Theme.Accent, TextAnchor.MiddleLeft, false, true);
+            Ui.Place(_draftTitle.rectTransform, new Vector2(0, 1), new Vector2(1, 1), new Vector2(70, -26), new Vector2(-12, -4));
+            _entry = DraftField(_orderDraft, "Entry (blank = market)", 0);
+            _sl = DraftField(_orderDraft, "Stop-loss (pips)", 1);
+            _tp = DraftField(_orderDraft, "Take-profit (pips)", 2);
+            _sizeMode = Ui.Button(_orderDraft, "Risk %", () => Session.UpdateDraft(d => d.RiskSizing = !d.RiskSizing), Theme.PanelAlt, 12);
+            Ui.Place((RectTransform)_sizeMode.transform, new Vector2(0, 1), new Vector2(0.55f, 1), new Vector2(12, -4 - 3 * 29 - 26), new Vector2(-4, -4 - 3 * 29));
+            _lots = Ui.Input(_orderDraft, "1", 14, InputField.ContentType.DecimalNumber);
+            Ui.Place((RectTransform)_lots.transform, new Vector2(0.55f, 1), Vector2.one, new Vector2(0, -4 - 3 * 29 - 26), new Vector2(-12, -4 - 3 * 29));
+            _draftInfo = Ui.Label(_orderDraft, "", 11, Theme.Text, TextAnchor.UpperLeft, true);
+            _draftInfo.horizontalOverflow = HorizontalWrapMode.Wrap;
+            Ui.Place(_draftInfo.rectTransform, Vector2.zero, Vector2.one, new Vector2(12, 40), new Vector2(-12, -4 - 4 * 29 - 2));
+            _place = Ui.Button(_orderDraft, "Place order", () => Session.SubmitDraft(), new Color(0.1f, 0.5f, 0.4f), 14);
+            Ui.Place((RectTransform)_place.transform, new Vector2(0, 0), new Vector2(0.62f, 0), new Vector2(12, 4), new Vector2(-4, 36));
+            var cancel = Ui.Button(_orderDraft, "Cancel", () => Session.CancelDraft(), Theme.PanelAlt, 13);
+            Ui.Place((RectTransform)cancel.transform, new Vector2(0.62f, 0), new Vector2(1, 0), new Vector2(4, 4), new Vector2(-12, 36));
+            _entry.onEndEdit.AddListener(CommitEntry);
+            _sl.onEndEdit.AddListener(text => CommitPips(text, true));
+            _tp.onEndEdit.AddListener(text => CommitPips(text, false));
+            _lots.onEndEdit.AddListener(CommitSize);
+
             var closeAll = Ui.Button(order, "Close all", () => Session.CloseAll(), Theme.PanelAlt, 12);
-            Ui.Place((RectTransform)closeAll.transform, new Vector2(0, 0), new Vector2(1, 0), new Vector2(12, 12), new Vector2(-12, 38));
+            Ui.Place((RectTransform)closeAll.transform, new Vector2(0, 0), new Vector2(1, 0), new Vector2(12, 8), new Vector2(-12, 36));
+            _orderDraft.gameObject.SetActive(false);
+            _draftTitle.gameObject.SetActive(false);
+        }
+
+        TerminalGuide _guide;
+        public TerminalGuide Guide { get { return _guide; } }
+        public Action StartTutorial;
+        RectTransform _orderStart, _orderDraft;
+        Text _draftTitle, _draftInfo;
+        InputField _entry;
+        Button _sizeMode, _place;
+
+        InputField DraftField(RectTransform parent, string label, int index)
+        {
+            float top = -4 - index * 29;
+            var l = Ui.Label(parent, label, 11, Theme.Dim, TextAnchor.MiddleLeft);
+            Ui.Place(l.rectTransform, new Vector2(0, 1), new Vector2(0.55f, 1), new Vector2(12, top - 26), new Vector2(0, top));
+            var f = Ui.Input(parent, "", 14, InputField.ContentType.DecimalNumber);
+            Ui.Place((RectTransform)f.transform, new Vector2(0.55f, 1), new Vector2(1, 1), new Vector2(0, top - 26), new Vector2(-12, top));
+            return f;
+        }
+
+        // ---- the order plan: the fields edit the same draft the chart lines do
+
+        void CommitEntry(string text)
+        {
+            var v = Session.DescribeDraft();
+            if (v == null) return;
+            long? next = null;
+            if (!string.IsNullOrWhiteSpace(text))
+            {
+                try { next = Units.ParsePrice(text.Trim(), Session.Instrument.Digits); }
+                catch (Exception) { Session.UpdateDraft(d => { }); return; }
+            }
+            long current = v.Resolution.EntryPrice;
+            long target = next ?? OrderBuilder.EntryFor(v.Draft.Direction, Session.State.Bid.HasValue && Session.State.Ask.HasValue ? new Quote { Bid = Session.State.Bid.Value, Ask = Session.State.Ask.Value } : new Quote { Bid = current, Ask = current });
+            long delta = target - current; // the stop and target keep their distances
+            Session.UpdateDraft(d => { d.Entry = next; d.StopLoss += delta; if (d.TakeProfit.HasValue) d.TakeProfit += delta; });
+        }
+
+        void CommitPips(string text, bool stop)
+        {
+            var v = Session.DescribeDraft();
+            if (v == null) return;
+            double n;
+            bool blank = string.IsNullOrWhiteSpace(text);
+            if (blank && !stop) { Session.UpdateDraft(d => d.TakeProfit = null); return; }
+            if (!double.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out n) || !(n > 0)) { Session.UpdateDraft(d => { }); return; }
+            int sign = v.Draft.Direction == Direction.Buy ? 1 : -1;
+            long entry = v.Resolution.EntryPrice;
+            long level = (long)Math.Round(entry + (stop ? -sign : sign) * n * Session.Instrument.PipPoints);
+            Session.UpdateDraft(d => { if (stop) d.StopLoss = level; else d.TakeProfit = level; });
+        }
+
+        void CommitSize(string text)
+        {
+            var v = Session.DescribeDraft();
+            if (v == null) return;
+            if (v.Draft.RiskSizing)
+            {
+                double pct;
+                if (double.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out pct)) Session.UpdateDraft(d => d.RiskPct = pct); else Session.UpdateDraft(d => { });
+            }
+            else
+            {
+                var lots = Units.ParseLots(text);
+                if (lots.HasValue) Session.UpdateDraft(d => d.Lots = lots.Value); else Session.UpdateDraft(d => { });
+            }
+        }
+
+        static void SetIfIdle(InputField f, string text) { if (!f.isFocused && f.text != text) f.text = text; }
+
+        void RefreshOrder()
+        {
+            var v = Session.DescribeDraft();
+            bool open = v != null;
+            _orderStart.gameObject.SetActive(!open);
+            _orderDraft.gameObject.SetActive(open);
+            _draftTitle.gameObject.SetActive(open);
+            if (!open) return;
+            var inst = Session.Instrument;
+            var d = v.Draft; var r = v.Resolution;
+            string kind = r.Kind == EntryClass.Market ? "market order" : r.Kind == EntryClass.Limit ? "limit order" : "stop order";
+            _draftTitle.text = (d.Direction == Direction.Buy ? "LONG" : "SHORT") + "  -  " + kind;
+            _draftTitle.color = d.Direction == Direction.Buy ? Theme.Bull : Theme.Bear;
+            Func<long, string> pips = p => (Math.Abs(p - r.EntryPrice) / (double)inst.PipPoints).ToString("0.#", CultureInfo.InvariantCulture);
+            SetIfIdle(_entry, d.Entry.HasValue ? Units.FormatPrice(d.Entry.Value, inst.Digits) : "");
+            SetIfIdle(_sl, pips(d.StopLoss));
+            SetIfIdle(_tp, d.TakeProfit.HasValue ? pips(d.TakeProfit.Value) : "");
+            Ui.SetButtonLabel(_sizeMode, d.RiskSizing ? "Risk % of balance" : "Fixed lots");
+            SetIfIdle(_lots, d.RiskSizing ? d.RiskPct.ToString("0.##", CultureInfo.InvariantCulture) : Units.FormatLots(d.Lots));
+            var sb = new StringBuilder();
+            sb.Append("Size   ").Append(r.Lots.HasValue ? Units.FormatLots(r.Lots.Value) + " lots" : "-").Append('\n');
+            if (v.Preview != null)
+            {
+                sb.Append("Risk at SL   ").Append(v.Preview.Risk.HasValue ? v.Preview.Risk.Value.ToString() : "no stop").Append("    Margin   ").Append(v.Preview.Margin).Append('\n');
+                sb.Append("Reward   ").Append(v.Preview.Reward.HasValue ? v.Preview.Reward.Value.ToString() : "no target").Append("    R:R   ").Append(v.Preview.RewardRisk.HasValue ? v.Preview.RewardRisk.Value.ToString("0.0", CultureInfo.InvariantCulture) : "-");
+            }
+            string problem = r.Issue ?? v.Rejection;
+            if (problem != null) sb.Append("\n<color=#ed5259>").Append(problem).Append("</color>");
+            _draftInfo.text = sb.ToString();
+            _place.interactable = v.Valid;
+            Ui.SetButtonLabel(_place, r.Kind == EntryClass.Market ? "Place order" : "Place " + (r.Kind == EntryClass.Limit ? "limit" : "stop") + " order");
         }
 
         Text StatRow(RectTransform parent, string label, int index)
@@ -237,16 +370,6 @@ namespace TradingEmpire.Terminal
             var v = Ui.Label(parent, "", 13, Theme.Text, TextAnchor.MiddleRight, true);
             Ui.Place(v.rectTransform, new Vector2(0.4f, 1), new Vector2(1, 1), new Vector2(0, top - 20), new Vector2(-12, top));
             return v;
-        }
-
-        InputField FieldRow(RectTransform parent, string label, string value, int index)
-        {
-            float top = -40 - index * 40;
-            var l = Ui.Label(parent, label, 12, Theme.Dim, TextAnchor.MiddleLeft);
-            Ui.Place(l.rectTransform, new Vector2(0, 1), new Vector2(0.55f, 1), new Vector2(12, top - 30), new Vector2(0, top));
-            var f = Ui.Input(parent, value, 14, InputField.ContentType.DecimalNumber);
-            Ui.Place((RectTransform)f.transform, new Vector2(0.55f, 1), new Vector2(1, 1), new Vector2(0, top - 30), new Vector2(-12, top));
-            return f;
         }
 
         void BuildBottomPanel(RectTransform bottom)
@@ -347,20 +470,18 @@ namespace TradingEmpire.Terminal
         {
             var a = d.GetAnchor("a"); var b = d.GetAnchor("b"); var c = d.GetAnchor("c");
             if (!a.HasValue || !b.HasValue || !c.HasValue) return;
-            int pip = Session.Instrument.PipPoints;
-            _sl.text = (Math.Abs(a.Value.Price - c.Value.Price) / pip).ToString("0.#", CultureInfo.InvariantCulture);
-            _tp.text = (Math.Abs(b.Value.Price - a.Value.Price) / pip).ToString("0.#", CultureInfo.InvariantCulture);
-            _toast.text = "Order panel filled from the " + (d.Str("side") == "short" ? "short" : "long") + " box: press " + (d.Str("side") == "short" ? "SHORT" : "LONG") + " to trade it";
+            var dir = d.Str("side") == "short" ? Direction.Sell : Direction.Buy;
+            Session.StartDraft(dir);
+            var v = Session.DescribeDraft();
+            if (v == null) return;
+            long entry = v.Resolution.EntryPrice;
+            long sl = (long)Math.Round(Math.Abs(a.Value.Price - c.Value.Price)), tp = (long)Math.Round(Math.Abs(b.Value.Price - a.Value.Price));
+            int sign = dir == Direction.Buy ? 1 : -1;
+            Session.UpdateDraft(x => { x.StopLoss = entry - sign * sl; x.TakeProfit = entry + sign * tp; });
+            _toast.text = "Plan filled from the " + (dir == Direction.Buy ? "long" : "short") + " box: check it and press Place order";
             _toast.color = Theme.Text;
             _toast.transform.parent.gameObject.SetActive(true);
             _toastUntil = Time.unscaledTime + 4f;
-        }
-
-        void Submit(Direction dir)
-        {
-            var lots = Units.ParseLots(_lots.text);
-            if (lots == null) { Session.PlaceOrder(new OrderRequest { Direction = dir, Lots = 0 }); return; }
-            Session.QuickOrder(dir, lots.Value, ParsePips(_sl.text), ParsePips(_tp.text));
         }
 
         static double? ParsePips(string text)
@@ -384,11 +505,14 @@ namespace TradingEmpire.Terminal
             // typing in a text field must never trigger the game's shortcuts
             var selected = UnityEngine.EventSystems.EventSystem.current != null ? UnityEngine.EventSystems.EventSystem.current.currentSelectedGameObject : null;
             if (selected != null && selected.GetComponent<InputField>() != null) return;
+            if (_guide != null && _guide.Open) return; // the guide window has the keyboard
+            if (Input.GetKeyDown(KeyCode.Escape) && Session.Draft != null) { Session.CancelDraft(); return; }
             if (Input.GetKeyDown(KeyCode.Escape) && _onBack != null) _onBack();
             if (Input.GetKeyDown(KeyCode.Space)) Session.TogglePlay();
             if (Input.GetKeyDown(KeyCode.RightArrow)) { if (Input.GetKey(KeyCode.LeftShift) || Input.GetKey(KeyCode.RightShift)) Session.StepBar(); else Session.Step(); }
-            if (Input.GetKeyDown(KeyCode.L)) Submit(Direction.Buy);
-            if (Input.GetKeyDown(KeyCode.S)) Submit(Direction.Sell);
+            if (Input.GetKeyDown(KeyCode.L)) Session.StartDraft(Direction.Buy);
+            if (Input.GetKeyDown(KeyCode.S)) Session.StartDraft(Direction.Sell);
+            if (Input.GetKeyDown(KeyCode.Return) && Session.Draft != null) Session.SubmitDraft();
         }
 
         void Refresh()
@@ -413,6 +537,7 @@ namespace TradingEmpire.Terminal
 
             _chart.Refresh(Session.ChartData());
             RefreshChallenge();
+            RefreshOrder();
             RefreshTabs(s, inst);
 
             if (s.Notice != null && s.Notice.Seq != _lastToastSeq)

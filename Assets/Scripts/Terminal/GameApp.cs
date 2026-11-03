@@ -117,6 +117,7 @@ namespace TradingEmpire.Terminal
             app.MenuHud = MenuHud.Build(canvasGo.transform, app);
             app.PhotoBar = PhotoBar.Build(canvasGo.transform, app);
             app.Tutorial = TutorialCard.Build(canvasGo.transform, app, persist);
+            app.Terminal.StartTutorial = () => app.Tutorial.StartTutorial();
             app.ShowTerminal(false);
             if (startupNotice != null) app.World.City.Announce(string.IsNullOrEmpty(startupNotice) ? NoticeKind.Info : NoticeKind.Error, startupNotice);
             app._nextAutosave = Time.unscaledTime + AutosaveSeconds;

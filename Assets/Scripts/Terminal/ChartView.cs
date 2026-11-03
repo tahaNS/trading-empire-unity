@@ -52,7 +52,8 @@ namespace TradingEmpire.Terminal
         readonly List<Text> _drawLabels = new List<Text>();
         readonly List<Text> _indLabels = new List<Text>();
         IndicatorPanel _indicatorPanel;
-        Button _indicatorButton;
+        ObjectPanel _objectPanel;
+        Button _indicatorButton, _objectButton;
         Text _empty, _hint;
         bool _hover;
 
@@ -95,7 +96,10 @@ namespace TradingEmpire.Terminal
             view.BuildToolStrip();
             view.BuildProps();
             view._indicatorPanel = IndicatorPanel.Create(rt);
-            view._indicatorButton = Ui.Button(rt, "Indicators", () => view._indicatorPanel.Toggle(), Theme.PanelAlt, 11);
+            view._objectPanel = ObjectPanel.Create(rt, view);
+            view._objectButton = Ui.Button(rt, "Objects", () => { view._indicatorPanel.Show(false); view._objectPanel.Toggle(); }, Theme.PanelAlt, 11);
+            Ui.Place((RectTransform)view._objectButton.transform, new Vector2(1, 1), new Vector2(1, 1), new Vector2(-132, -26), new Vector2(-84, -4));
+            view._indicatorButton = Ui.Button(rt, "Indicators", () => { view._objectPanel.Show(false); view._indicatorPanel.Toggle(); }, Theme.PanelAlt, 11);
             Ui.Place((RectTransform)view._indicatorButton.transform, new Vector2(1, 1), new Vector2(1, 1), new Vector2(-250, -26), new Vector2(-138, -4));
             return view;
         }
@@ -113,6 +117,7 @@ namespace TradingEmpire.Terminal
             _session.Drawings.Changed += OnDrawingsChanged;
             _session.Indicators.Changed += OnIndicatorsChanged;
             if (_indicatorPanel != null) _indicatorPanel.Bind(session);
+            if (_objectPanel != null) _objectPanel.Bind(session);
             _tool = null;
             _pending.Clear();
             _selectedId = null;
@@ -293,6 +298,12 @@ namespace TradingEmpire.Terminal
         {
             if (Typing()) return;
             if (Input.GetKeyDown(KeyCode.Escape)) { if (_pending.Count > 0 || _tool != null) SetTool(null); else Select(null); }
+            if (Input.GetKeyDown(KeyCode.V)) SetTool(null);
+            if (Input.GetKeyDown(KeyCode.H)) SetTool("hline");
+            if (Input.GetKeyDown(KeyCode.T)) SetTool("trend");
+            if (Input.GetKeyDown(KeyCode.R)) SetTool("rect");
+            if (Input.GetKeyDown(KeyCode.G)) SetTool("fib");
+            if (Input.GetKeyDown(KeyCode.X)) SetTool("text");
             if ((Input.GetKeyDown(KeyCode.Delete) || Input.GetKeyDown(KeyCode.Backspace)) && _selectedId != null) DeleteSelected();
             if (Input.GetMouseButtonDown(1)) SetTool(null);
 
@@ -320,6 +331,10 @@ namespace TradingEmpire.Terminal
                 if (_pending.Count == need) Place(_tool, new List<Anchor>(_pending));
                 return;
             }
+            // the order being planned: grab one of its lines
+            if (_session.Draft != null)
+                foreach (var l in _graphic.Lines)
+                    if (l.Tag != null && Mathf.Abs(local.y - _graphic.YOf(l.Price)) <= 7f) { _dragDraft = l.Tag; _graphic.Freeze = true; return; }
             // cursor: handles first, then a body
             var scene = _graphic.Scene;
             var sel = SelectedDrawing();
@@ -336,6 +351,7 @@ namespace TradingEmpire.Terminal
         public void PointerDrag(Vector2 local)
         {
             var a = AnchorAt(local);
+            if (_dragDraft != null) { DragDraft(_dragDraft, (long)Math.Round(_graphic.PriceOfY(local.y))); return; }
             if (_dragHandle >= 0 && _selectedId != null) { int idx = _dragHandle; EditSelected(d => DrawingKinds.SetAnchorAt(d, idx, a)); }
             else if (_moving && _selectedId != null)
             {
@@ -347,6 +363,8 @@ namespace TradingEmpire.Terminal
 
         public void PointerUp(Vector2 local)
         {
+            _dragDraft = null;
+            _graphic.Freeze = false;
             _dragHandle = -1;
             _moving = false;
             if (_dragCreating && _tool != null && _pending.Count == 1)
@@ -424,10 +442,50 @@ namespace TradingEmpire.Terminal
             g.TfMs = d.TfMs;
             g.Markers = d.Markers;
             g.Lines = BuildLines(d);
+            AddDraftLines(g.Lines);
             ComputeIndicators(d);
             g.SetVerticesDirty();
             LayoutLabels();
             if (_propsDirty) RefreshProps();
+        }
+
+        /// <summary>The order being planned: entry, stop-loss and take-profit lines with their money, which can be dragged.</summary>
+        void AddDraftLines(List<ChartLine> lines)
+        {
+            var v = _session != null ? _session.DescribeDraft() : null;
+            if (v == null) return;
+            var inst = _session.Instrument;
+            Func<long, string> f = p => Units.FormatPrice(p, inst.Digits);
+            long entry = v.Resolution.EntryPrice;
+            string side = v.Draft.Direction == Direction.Buy ? "BUY" : "SELL";
+            string kind = v.Resolution.Kind == EntryClass.Market ? "MARKET" : v.Resolution.Kind == EntryClass.Limit ? "LIMIT" : "STOP";
+            string lots = v.Resolution.Lots.HasValue ? " " + Units.FormatLots(v.Resolution.Lots.Value) : "";
+            lines.Add(new ChartLine { Price = entry, Color = v.Draft.Direction == Direction.Buy ? Theme.Bull : Theme.Bear, Dashed = false, Tag = "entry", Label = "PLAN " + side + " " + kind + lots + "  " + f(entry) });
+            double slPips = Math.Abs(v.Draft.StopLoss - entry) / (double)inst.PipPoints;
+            string risk = v.Preview != null && v.Preview.Risk.HasValue ? "  -" + v.Preview.Risk.Value : "";
+            lines.Add(new ChartLine { Price = v.Draft.StopLoss, Color = Theme.Bear, Dashed = true, Tag = "sl", Label = "SL " + slPips.ToString("0.0", CultureInfo.InvariantCulture) + " pips" + risk });
+            if (v.Draft.TakeProfit.HasValue)
+            {
+                double tpPips = Math.Abs(v.Draft.TakeProfit.Value - entry) / (double)inst.PipPoints;
+                string reward = v.Preview != null && v.Preview.Reward.HasValue ? "  +" + v.Preview.Reward.Value : "";
+                string rr = v.Preview != null && v.Preview.RewardRisk.HasValue ? "  R:R " + v.Preview.RewardRisk.Value.ToString("0.0", CultureInfo.InvariantCulture) : "";
+                lines.Add(new ChartLine { Price = v.Draft.TakeProfit.Value, Color = Theme.Bull, Dashed = true, Tag = "tp", Label = "TP " + tpPips.ToString("0.0", CultureInfo.InvariantCulture) + " pips" + reward + rr });
+            }
+        }
+
+        string _dragDraft;
+
+        void DragDraft(string tag, long price)
+        {
+            var v = _session.DescribeDraft();
+            if (v == null) return;
+            long current = v.Resolution.EntryPrice;
+            _session.UpdateDraft(d =>
+            {
+                if (tag == "sl") d.StopLoss = price;
+                else if (tag == "tp") d.TakeProfit = price;
+                else { long delta = price - current; d.Entry = price; d.StopLoss += delta; if (d.TakeProfit.HasValue) d.TakeProfit += delta; }
+            });
         }
 
         /// <summary>Indicators are computed over the revealed bars only (the last 2000 of them: older bars no longer change the values).</summary>
@@ -543,7 +601,7 @@ namespace TradingEmpire.Terminal
                 if (string.IsNullOrEmpty(l.Label) || l.Price < g.Lo || l.Price > g.Hi) continue;
                 var t = Pooled(_lineLabels, m++, 11, l.Color);
                 t.alignment = TextAnchor.MiddleRight;
-                Pos(t, g.Plot.xMax - 190, g.YOf(l.Price) + 8, 188, 14);
+                Pos(t, g.Plot.xMax - 340, g.YOf(l.Price) + 8, 338, 14);
                 t.text = l.Label;
             }
 
@@ -625,7 +683,7 @@ namespace TradingEmpire.Terminal
                 rt.anchorMin = rt.anchorMax = new Vector2(0.5f, 0.5f);
                 rt.pivot = new Vector2(0, 0);
                 pool.Add(t);
-                if (_indicatorPanel != null) t.transform.SetSiblingIndex(_indicatorPanel.transform.GetSiblingIndex()); // keep labels under the indicator window
+                if (_indicatorPanel != null) t.transform.SetSiblingIndex(Mathf.Min(_indicatorPanel.transform.GetSiblingIndex(), _objectPanel != null ? _objectPanel.transform.GetSiblingIndex() : int.MaxValue)); // keep labels under the indicator window
             }
             t.color = color;
             t.alignment = TextAnchor.MiddleLeft;
@@ -644,5 +702,6 @@ namespace TradingEmpire.Terminal
         // for tests and tools
         public CandleGraphic Graphic { get { return _graphic; } }
         public IndicatorPanel IndicatorWindow { get { return _indicatorPanel; } }
+        public ObjectPanel ObjectWindow { get { return _objectPanel; } }
     }
 }

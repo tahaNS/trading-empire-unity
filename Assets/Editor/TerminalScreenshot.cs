@@ -143,7 +143,20 @@ namespace TradingEmpire.EditorTools
                 s.Drawings.Add(DrawingKinds.Make("fibarcs", "#c792ea", ("a", new Anchor(bars[n - 40].Time, bars[n - 40].Low)), ("b", new Anchor(bars[n - 15].Time, bars[n - 15].High))));
             }
             Shot(app, cam, rt, prefix + "-drawings.png");
+            app.Terminal.Chart.ObjectWindow.Show(true);
+            app.Terminal.Chart.ObjectWindow.RefreshNow();
+            Shot(app, cam, rt, prefix + "-objects.png");
+            app.Terminal.Chart.ObjectWindow.Show(false);
             s.Drawings.Clear();
+
+            // the order plan with its lines, and the guide window
+            s.CloseAll();
+            s.StartDraft(Direction.Buy);
+            Shot(app, cam, rt, prefix + "-plan.png");
+            s.CancelDraft();
+            app.Terminal.Guide.Show(true);
+            Shot(app, cam, rt, prefix + "-guide.png");
+            app.Terminal.Guide.Show(false);
 
             // the guided first trade
             app.Tutorial.StartTutorial();
