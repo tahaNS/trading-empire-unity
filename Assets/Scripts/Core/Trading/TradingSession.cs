@@ -102,6 +102,8 @@ namespace TradingEmpire.Core
 
         public InstrumentDefinition Instrument { get; private set; }
         public readonly TradingAccount Account;
+        /// <summary>Notes, tags and ratings for closed trades (saved with the game).</summary>
+        public readonly JournalStore Journal = new JournalStore();
         /// <summary>Raised after any change to <see cref="State"/>.</summary>
         public event Action Changed;
         public SessionState State { get; private set; }
@@ -222,6 +224,47 @@ namespace TradingEmpire.Core
 
         /// <summary>Dataset candles, for the save layer only (never exposed to the UI or chart).</summary>
         public IReadOnlyList<Candle> DatasetCandles() { return _candles; }
+
+        /// <summary>Replay and run facts the save file needs.</summary>
+        public (DatasetInfo dataset, int revealed, int speed, int runId, long chartTfMs) SaveState()
+        {
+            return (State.Dataset, _replay != null ? _replay.Revealed.Count : 0, _replay != null ? _replay.Speed : 2, _runId, _chartTf);
+        }
+
+        /// <summary>
+        /// Replace the whole session from a validated save: dataset, replay position, positions and account. Candles up to
+        /// <paramref name="revealed"/> are re-revealed (with no positions open, so SL/TP never re-fire), then the saved account is restored.
+        /// </summary>
+        public void Restore(DatasetInfo dataset, IReadOnlyList<Candle> candles, int revealed, int speed, int runId, AccountSnapshot account,
+            long? chartTfMs = null, IReadOnlyDictionary<string, JournalEntry> journal = null)
+        {
+            if (_replay != null) _replay.Pause();
+            UseInstrument(Instruments.Find(dataset.Symbol) ?? Instruments.EURUSD);
+            _candles = candles.ToList();
+            _timeframeMs = DetectTimeframe(candles);
+            _chartTf = ValidChartTf(chartTfMs ?? _timeframeMs);
+            _runId = runId;
+            // Rebuild the replay with nothing open or resting, so SL/TP and fills never re-fire.
+            Account.Restore(new AccountSnapshot
+            {
+                StartingBalance = account.StartingBalance, Balance = account.Balance, RealizedPnl = account.RealizedPnl, Deposits = account.Deposits, Withdrawals = account.Withdrawals,
+                Transactions = account.Transactions, Open = new List<Position>(), Closed = new List<Position>(), Pending = new List<PendingOrder>(),
+            });
+            _engine.Quote = null;
+            StartReplay(revealed);
+            _replay.SetSpeed(speed);
+            Account.Restore(account);
+            _engine.ResumeIds(account.Open.Concat(account.Closed), account.Pending);
+            Journal.Restore(journal ?? new Dictionary<string, JournalEntry>());
+            var info = new DatasetInfo
+            {
+                Id = dataset.Id, Seed = dataset.Seed, Name = dataset.Name, Synthetic = dataset.Synthetic, Symbol = Instrument.Symbol,
+                Total = candles.Count, TimeframeMs = _timeframeMs,
+            };
+            State = Build(SessionStatus.Ready, info);
+            State.Report = null; State.Error = null; State.Notice = null;
+            if (Changed != null) Changed();
+        }
 
         /// <summary>Restart from the beginning of the dataset. Open positions are closed at market first.</summary>
         public void Restart()

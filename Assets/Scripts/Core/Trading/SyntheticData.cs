@@ -12,29 +12,12 @@ namespace TradingEmpire.Core
     {
         const long M15 = 15 * 60000;
 
-        sealed class Rng
-        {
-            uint _a;
-            public Rng(uint seed) { _a = seed; }
-            public double Next()
-            {
-                unchecked
-                {
-                    _a += 0x6D2B79F5u;
-                    uint t = _a;
-                    t = (t ^ (t >> 15)) * (t | 1u);
-                    t ^= t + (t ^ (t >> 7)) * (t | 61u);
-                    return (t ^ (t >> 14)) / 4294967296.0;
-                }
-            }
-        }
-
         // JavaScript's Math.round: halves round up (toward +infinity), unlike C#'s banker's rounding.
         static long JsRound(double x) { return (long)Math.Floor(x + 0.5); }
 
         public static List<Candle> Generate(uint seed = 42, int count = 3000, long timeframeMs = M15)
         {
-            var rand = new Rng(seed);
+            var rand = new Mulberry32(seed);
             var output = new List<Candle>();
             long price = 110000; // points (1.10000)
             // Volatility per candle scales with the square root of the candle length (M15 = 35 points).
