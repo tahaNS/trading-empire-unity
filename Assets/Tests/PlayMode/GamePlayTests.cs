@@ -22,11 +22,27 @@ namespace TradingEmpire.PlayModeTests
             foreach (var o in UnityEngine.Object.FindObjectsByType<Canvas>(FindObjectsSortMode.None)) UnityEngine.Object.DestroyImmediate(o.gameObject);
         }
 
+        // the tests click settings buttons; they must not leave the player's own settings changed
+        static readonly string[] PrefKeys = { "te.uiScale", "te.colorBlind", "te.muted", "te.welcomed", "te.tutorial", "te.tutorial.step" };
+        readonly System.Collections.Generic.Dictionary<string, string> _savedPrefs = new System.Collections.Generic.Dictionary<string, string>();
+
         [SetUp]
-        public void Setup() { CleanAll(); }
+        public void Setup()
+        {
+            _savedPrefs.Clear();
+            foreach (var k in PrefKeys) if (PlayerPrefs.HasKey(k)) _savedPrefs[k] = PlayerPrefs.GetString(k, null) ?? PlayerPrefs.GetInt(k).ToString();
+            CleanAll();
+        }
 
         [TearDown]
-        public void TearDown() { CleanAll(); }
+        public void TearDown()
+        {
+            CleanAll();
+            foreach (var k in PrefKeys) PlayerPrefs.DeleteKey(k);
+            foreach (var kv in _savedPrefs) { int n; if (int.TryParse(kv.Value, out n)) PlayerPrefs.SetInt(kv.Key, n); else PlayerPrefs.SetString(kv.Key, kv.Value); }
+            PlayerPrefs.Save();
+            GameSettings.Load();
+        }
 
         static Button[] LiveButtons()
         {

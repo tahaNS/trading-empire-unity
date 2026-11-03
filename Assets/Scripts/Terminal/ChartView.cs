@@ -136,12 +136,34 @@ namespace TradingEmpire.Terminal
 
         // ---------------------------------------------------------------- tool strip and properties bar
 
+        RectTransform _strip;
+        float _stripHeight = -1;
+
+        /// <summary>The tool buttons shrink to fit when the chart is short, so none of them is cut off.</summary>
+        void LayoutTools()
+        {
+            if (_strip == null) return;
+            float height = _strip.rect.height;
+            if (Mathf.Approximately(height, _stripHeight) || height < 60) return;
+            _stripHeight = height;
+            int n = _toolButtons.Count;
+            float gap = 2f, clearRoom = 30f;
+            float h = Mathf.Clamp((height - clearRoom - gap) / n - gap, 11f, 19f);
+            float y = gap;
+            foreach (var b in _toolButtons)
+            {
+                Ui.Place((RectTransform)b.transform, new Vector2(0, 1), new Vector2(1, 1), new Vector2(2, -y - h), new Vector2(-2, -y));
+                y += h + gap;
+            }
+        }
+
         void BuildToolStrip()
         {
             var strip = Ui.Rect(_root, "Tools");
             Ui.Place(strip, new Vector2(0, 0), new Vector2(0, 1), new Vector2(2, 28), new Vector2(40, -4));
             Ui.Panel(strip, "Bg", new Color(0.05f, 0.07f, 0.1f, 0.9f)).rectTransform.SetAsFirstSibling();
             Ui.Stretch((RectTransform)strip.Find("Bg"));
+            _strip = strip;
             float y = 2, h = 19;
             foreach (var t in Tools)
             {
@@ -281,6 +303,7 @@ namespace TradingEmpire.Terminal
 
         void Update()
         {
+            LayoutTools();
             if (_propsDirty) RefreshProps();
             if (!_hover) return;
             float wheel = Input.mouseScrollDelta.y;
@@ -434,6 +457,7 @@ namespace TradingEmpire.Terminal
 
         public void Refresh(ChartData d)
         {
+            LayoutTools();
             _data = d;
             _empty.gameObject.SetActive(d.Candles.Count == 0);
             var g = _graphic;
