@@ -150,10 +150,14 @@ namespace TradingEmpire.Terminal
                 bool bull = c.Close >= c.Open;
                 Color col = bull ? Theme.Bull : Theme.Bear;
                 float x = XOfIndex(i);
-                Quad(vh, x - 0.5f, YOf(c.Low), x + 0.5f, YOf(c.High), col);
+                // with auto scale off a candle can lie outside the price range: it is cut at the plot edge, or left out
+                float yLow = YOf(c.Low), yHigh = YOf(c.High);
+                if (yHigh < Plot.yMin || yLow > Plot.yMax) continue;
+                Quad(vh, x - 0.5f, Mathf.Max(yLow, Plot.yMin), x + 0.5f, Mathf.Min(yHigh, Plot.yMax), col);
                 float y0 = YOf(Math.Min(c.Open, c.Close)), y1 = YOf(Math.Max(c.Open, c.Close));
                 if (y1 - y0 < 1f) y1 = y0 + 1f;
-                Quad(vh, x - bodyW / 2, y0, x + bodyW / 2, y1, col);
+                y0 = Mathf.Clamp(y0, Plot.yMin, Plot.yMax); y1 = Mathf.Clamp(y1, Plot.yMin, Plot.yMax);
+                if (y1 > y0) Quad(vh, x - bodyW / 2, y0, x + bodyW / 2, y1, col);
             }
 
             foreach (var ind in Overlays) DrawIndicator(vh, ind, Plot, v => YOf(v), 0, 0);
@@ -320,8 +324,12 @@ namespace TradingEmpire.Terminal
         {
             foreach (var f in Scene.Fills) Fan(vh, f.Points, f.Color);
             foreach (var t in Scene.Triangles) Tri(vh, t.P[0], t.P[1], t.P[2], t.Color);
-            foreach (var l in Scene.Lines)
+            foreach (var line in Scene.Lines)
             {
+                var l = line;
+                var ca = l.A; var cb = l.B;
+                if (!ClipSegment(ref ca, ref cb, Plot)) continue; // keep drawings inside the plot when the price range is manual
+                l.A = ca; l.B = cb;
                 if (l.Dashed) Dashes(vh, l, 9f, 5f);
                 else if (l.Dotted) Dashes(vh, l, 4f, 2f);
                 else Segment(vh, l.A, l.B, l.Width, l.Color);
