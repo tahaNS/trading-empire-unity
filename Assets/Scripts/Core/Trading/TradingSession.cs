@@ -352,6 +352,20 @@ namespace TradingEmpire.Core
             }
         }
 
+        /// <summary>The revealed candles around a closed trade (a margin of bars either side) and the index of the first one, for the journal chart.</summary>
+        public List<Candle> TradeCandles(Position p, int pad, out int first)
+        {
+            first = 0;
+            if (_replay == null) return new List<Candle>();
+            var shown = _replay.Revealed;
+            first = Math.Max(0, p.EntryCandleIndex - pad);
+            int exit = p.Exit != null ? p.Exit.CandleIndex : p.EntryCandleIndex;
+            int to = Math.Min(shown.Count - 1, exit + pad);
+            var list = new List<Candle>();
+            for (int i = first; i <= to; i++) list.Add(shown[i]);
+            return list;
+        }
+
         // ---------- the order draft ----------
 
         /// <summary>The order being planned on the chart and in the order panel (null when none).</summary>

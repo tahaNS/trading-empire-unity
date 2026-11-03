@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using TradingEmpire.Core;
 using UnityEngine;
 using UnityEngine.UI;
@@ -151,8 +152,78 @@ namespace TradingEmpire.Terminal
             };
         }
 
+        // ---- the yellow frame around the control the current step asks you to use
+
+        readonly List<Outline> _lit = new List<Outline>();
+        static readonly Color Gold = new Color(0.95f, 0.76f, 0.24f);
+
+        /// <summary>The controls the current step points at (only those on screen).</summary>
+        List<Graphic> Targets()
+        {
+            var list = new List<Graphic>();
+            var step = _tutorial.Status == TutorialStatus.Active ? _tutorial.Current : null;
+            if (step == null || _app.Photo) return list;
+            var canvas = GetComponentInParent<Canvas>();
+            if (canvas == null) return list;
+            Func<string, Graphic> button = prefix =>
+            {
+                foreach (var b in canvas.GetComponentsInChildren<Button>(false))
+                {
+                    var t = b.transform.Find("Label") != null ? b.transform.Find("Label").GetComponent<Text>() : null;
+                    if (t != null && t.text != null && t.text.StartsWith(prefix, StringComparison.Ordinal) && b.targetGraphic != null && b.isActiveAndEnabled) return b.targetGraphic;
+                }
+                return null;
+            };
+            Action<Graphic> add = g => { if (g != null && !list.Contains(g)) list.Add(g); };
+            Func<string, Graphic> panel = name =>
+            {
+                foreach (var g in canvas.GetComponentsInChildren<Graphic>(false))
+                    if (g.name == "Bg" && g.transform.parent != null && g.transform.parent.name == name) return g;
+                return null;
+            };
+            bool terminal = _app.TerminalOpen;
+            if (!terminal && step.Id != "transfer") { add(button("Open Terminal")); return list; }
+            switch (step.Id)
+            {
+                case "move": add(button("Play")); add(button("Pause")); add(button("Next candle")); break;
+                case "place": add(button("LONG")); add(button("SHORT")); add(button("Long")); add(button("Short")); add(button("Place order")); break;
+                case "close": add(button("Play")); add(button("Pause")); break;
+                case "journal": add(button("Journal")); break;
+                case "tools": add(panel("Tools")); break;
+                case "indicators": add(button("Indicators")); break;
+                case "transfer": if (terminal) add(panel("TransferCard")); else add(button("Finances")); break;
+            }
+            return list;
+        }
+
+        float _nextTargets;
+        List<Graphic> _wanted = new List<Graphic>();
+
+        public void UpdateHighlightNow() { _nextTargets = 0; UpdateHighlight(); }
+
+        void UpdateHighlight()
+        {
+            if (Time.unscaledTime >= _nextTargets) { _nextTargets = Time.unscaledTime + 0.3f; _wanted = Targets(); }
+            var wanted = _wanted;
+            for (int i = _lit.Count - 1; i >= 0; i--)
+            {
+                var o = _lit[i];
+                if (o == null) { _lit.RemoveAt(i); continue; }
+                if (!wanted.Contains(o.GetComponent<Graphic>())) { Ui.Kill(o); _lit.RemoveAt(i); }
+            }
+            foreach (var g in wanted)
+            {
+                var o = g.GetComponent<Outline>();
+                if (o == null || !_lit.Contains(o)) { if (o == null) o = g.gameObject.AddComponent<Outline>(); _lit.Add(o); }
+                o.effectDistance = new Vector2(2.5f, 2.5f);
+                float pulse = 0.65f + 0.35f * Mathf.Sin(Time.unscaledTime * 5f);
+                o.effectColor = new Color(Gold.r, Gold.g, Gold.b, pulse);
+            }
+        }
+
         void Update()
         {
+            UpdateHighlight();
             if (Time.unscaledTime < _nextCheck) return;
             _nextCheck = Time.unscaledTime + 0.25f;
             if (_tutorial.Advance(Facts())) Save();

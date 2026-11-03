@@ -175,6 +175,7 @@ namespace TradingEmpire.EditorTools
             // the guided first trade
             app.Tutorial.StartTutorial();
             app.Tutorial.Refresh();
+            app.Tutorial.UpdateHighlightNow();
             Shot(app, cam, rt, prefix + "-tutorial.png");
             app.Tutorial.Tutorial.Dismiss();
             app.Tutorial.Refresh();
