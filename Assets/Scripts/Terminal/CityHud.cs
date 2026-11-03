@@ -22,37 +22,18 @@ namespace TradingEmpire.Terminal
         public Action OnPhoto, OnSound;
         public Func<bool> IsMuted;
         Button _soundButton;
-        RectTransform _pillRow, _landRow;
-        float _layoutWidth = -1;
+        RectTransform _topLeft, _topRight;
+        float _scaleWidth = -1;
 
-        /// <summary>When the screen is too narrow for the cards and the buttons on one line (a large interface size), the buttons drop to a row of their own.</summary>
-        void ApplyTopLayout()
+        /// <summary>The cards and buttons on the top row are laid out for about 1500 pixels; on a narrower screen the whole row scales down so nothing ever overlaps (like the web page does).</summary>
+        void FitTopRow()
         {
             float width = ((RectTransform)transform).rect.width;
-            if (Mathf.Approximately(width, _layoutWidth) || width < 100) return;
-            _layoutWidth = width;
-            bool compact = width < 1480f;
-            var top = new Vector2(0, 1); var topRight = new Vector2(1, 1);
-            if (compact)
-            {
-                Ui.Place(_pillRow, top, topRight, new Vector2(12, -124), new Vector2(-12, -92));
-                Ui.Place(_landRow, top, topRight, new Vector2(12, -160), new Vector2(-12, -128));
-            }
-            else
-            {
-                Ui.Place(_pillRow, top, topRight, new Vector2(880, -52), new Vector2(-12, -12));
-                Ui.Place(_landRow, top, topRight, new Vector2(880, -92), new Vector2(-12, -58));
-            }
-            if (_inspector != null) _inspector.offsetMax = new Vector2(-12, compact ? -168 : -102);
-            // the policy and finance panels start below the buttons too
-            foreach (var panel in new[] { _transferPanel, _policyPanel })
-            {
-                if (panel == null) continue;
-                float h = panel.rect.height;
-                panel.anchoredPosition = new Vector2(panel.anchoredPosition.x, 0);
-                panel.offsetMax = new Vector2(panel.offsetMax.x, compact ? -170 : -96);
-                panel.offsetMin = new Vector2(panel.offsetMin.x, panel.offsetMax.y - h);
-            }
+            if (Mathf.Approximately(width, _scaleWidth) || width < 100) return;
+            _scaleWidth = width;
+            float scale = Mathf.Clamp(width / 1500f, 0.45f, 1f);
+            _topLeft.localScale = new Vector3(scale, scale, 1f);
+            _topRight.localScale = new Vector3(scale, scale, 1f);
         }
 
         Text _date, _treasury, _net, _chips, _toast;
@@ -95,7 +76,7 @@ namespace TradingEmpire.Terminal
         void MarkDirty() { _dirty = true; }
         void OnDestroy() { if (_world != null) { _world.City.Changed -= MarkDirty; _world.Clock.ViewChanged -= MarkDirty; _world.Trading.Changed -= MarkDirty; } }
 
-        public void RefreshNow() { _dirty = false; _layoutWidth = -1; ApplyTopLayout(); Refresh(); }
+        public void RefreshNow() { _dirty = false; _scaleWidth = -1; FitTopRow(); Refresh(); }
 
         // ---------------------------------------------------------------- layout
 
@@ -117,18 +98,21 @@ namespace TradingEmpire.Terminal
         void BuildUi(RectTransform root)
         {
             // top-left cards: treasury, net income, date and speed
-            var treasury = Ui.Card(root, "TreasuryCard");
+            _topLeft = Ui.Rect(root, "TopLeft");
+            Ui.Place(_topLeft, new Vector2(0, 1), new Vector2(0, 1), Vector2.zero, Vector2.zero);
+            _topLeft.pivot = new Vector2(0, 1); _topLeft.sizeDelta = new Vector2(870, 100); _topLeft.anchoredPosition = Vector2.zero;
+            var treasury = Ui.Card(_topLeft, "TreasuryCard");
             Ui.Place(treasury.rectTransform, new Vector2(0, 1), new Vector2(0, 1), new Vector2(12, -84), new Vector2(212, -12));
             Caption(treasury.transform, "TREASURY", 14, 170, 8, 18, 11, Theme.Muted, true);
             _treasury = Caption(treasury.transform, "", 14, 180, 28, 34, 22, Theme.Ink, true, true);
 
-            var net = Ui.Card(root, "NetCard");
+            var net = Ui.Card(_topLeft, "NetCard");
             Ui.Place(net.rectTransform, new Vector2(0, 1), new Vector2(0, 1), new Vector2(220, -84), new Vector2(450, -12));
             Caption(net.transform, "NET INCOME / 30 DAYS", 14, 210, 8, 18, 11, Theme.Muted, true);
             _net = Caption(net.transform, "", 14, 210, 26, 26, 19, Theme.Good, true, true);
             _chips = Caption(net.transform, "", 14, 210, 50, 18, 11, Theme.Good, true);
 
-            var date = Ui.Card(root, "DateCard");
+            var date = Ui.Card(_topLeft, "DateCard");
             Ui.Place(date.rectTransform, new Vector2(0, 1), new Vector2(0, 1), new Vector2(458, -84), new Vector2(868, -12));
             Caption(date.transform, "DATE", 14, 120, 8, 18, 11, Theme.Muted, true);
             _date = Caption(date.transform, "", 14, 130, 30, 30, 16, Theme.Ink, true);
@@ -147,9 +131,11 @@ namespace TradingEmpire.Terminal
             }
 
             // top-right pills
-            var row = Ui.Rect(root, "Pills");
-            _pillRow = row;
-            Ui.Place(row, new Vector2(0, 1), new Vector2(1, 1), new Vector2(880, -52), new Vector2(-12, -12));
+            _topRight = Ui.Rect(root, "TopRight");
+            Ui.Place(_topRight, Vector2.one, Vector2.one, Vector2.zero, Vector2.zero);
+            _topRight.pivot = Vector2.one; _topRight.sizeDelta = new Vector2(640, 64); _topRight.anchoredPosition = new Vector2(-12, -12);
+            var row = Ui.Rect(_topRight, "Pills");
+            Ui.Place(row, new Vector2(0, 1), Vector2.one, new Vector2(0, -40), Vector2.zero);
             float rx = 0;
             AddRight(row, "Open Terminal", ref rx, 128, () => _openTerminal(), true);
             AddRight(row, "?", ref rx, 30, () => { if (_openMenu != null) _openMenu(4); });
@@ -159,11 +145,6 @@ namespace TradingEmpire.Terminal
             AddRight(row, "Policies", ref rx, 74, () => Toggle(_policyPanel, _transferPanel));
             if (_openMenu != null) AddRight(row, "Progress", ref rx, 74, () => _openMenu(1));
             AddRight(row, "Finances", ref rx, 74, () => Toggle(_transferPanel, _policyPanel));
-            var landRow = Ui.Rect(root, "LandRow");
-            _landRow = landRow;
-            Ui.Place(landRow, new Vector2(0, 1), new Vector2(1, 1), new Vector2(880, -92), new Vector2(-12, -58));
-            float lx = 0;
-            _landButton = AddRight(landRow, "Buy land", ref lx, 210, () => City.ExpandLand());
 
             BuildBuildBar(root);
             BuildInspector(root);
@@ -199,6 +180,8 @@ namespace TradingEmpire.Terminal
             Ui.Place(bar.rectTransform, Vector2.zero, new Vector2(1, 0), new Vector2(12, 12), new Vector2(-12, 96));
             var hint = Ui.Label(bar.transform, "BUILD   click a building, then the map.  R rotates, Esc cancels", 11, Theme.Muted, TextAnchor.MiddleLeft, false, true);
             Ui.Place(hint.rectTransform, new Vector2(0, 1), Vector2.one, new Vector2(12, -22), new Vector2(-12, -3));
+            _landButton = Ui.Pill(bar.transform, "Buy land", () => City.ExpandLand(), true, 11);
+            Ui.Place((RectTransform)_landButton.transform, new Vector2(1, 1), new Vector2(1, 1), new Vector2(-232, -22), new Vector2(-8, -2));
             int n = Buildings.All.Count;
             for (int i = 0; i < n; i++)
             {
@@ -216,7 +199,7 @@ namespace TradingEmpire.Terminal
         void BuildInspector(RectTransform root)
         {
             _inspector = Ui.Card(root, "Inspector", 12f).rectTransform;
-            Ui.Place(_inspector, new Vector2(1, 0), new Vector2(1, 1), new Vector2(-340, 108), new Vector2(-12, -102));
+            Ui.Place(_inspector, new Vector2(1, 0), new Vector2(1, 1), new Vector2(-340, 108), new Vector2(-12, -76));
             _inspectorTitle = Ui.Label(_inspector, "", 17, Theme.Ink, TextAnchor.MiddleLeft, false, true);
             Ui.Place(_inspectorTitle.rectTransform, new Vector2(0, 1), Vector2.one, new Vector2(16, -40), new Vector2(-16, -8));
             _inspectorBody = Ui.Label(_inspector, "", 12, Theme.Ink, TextAnchor.UpperLeft, true);
@@ -341,7 +324,7 @@ namespace TradingEmpire.Terminal
 
         void Update()
         {
-            ApplyTopLayout();
+            FitTopRow();
             AnimateFloaters();
             if (_dirty) { _dirty = false; Refresh(); }
             if (_toast != null && _toast.transform.parent.gameObject.activeSelf && Time.unscaledTime > _toastUntil) _toast.transform.parent.gameObject.SetActive(false);
