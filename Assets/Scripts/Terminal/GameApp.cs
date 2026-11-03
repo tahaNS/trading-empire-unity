@@ -108,6 +108,7 @@ namespace TradingEmpire.Terminal
             app.ShowTerminal(false);
             if (startupNotice != null) app.World.City.Announce(string.IsNullOrEmpty(startupNotice) ? NoticeKind.Info : NoticeKind.Error, startupNotice);
             app._nextAutosave = Time.unscaledTime + AutosaveSeconds;
+            Debug.Log("Trading Empire started (" + (loaded ? "loaded a save" : "new game") + ", " + app.World.City.State.Buildings.Count + " buildings, " + app.World.Trading.State.Total + " candles)");
             return app;
         }
 

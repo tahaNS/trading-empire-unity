@@ -49,5 +49,12 @@ Not ported from the web version: indicators, the other drawing kinds (regression
 - `cd Tests/Core.Tests && dotnet test` the game rules (196 tests, including a random-play stress test: many seeds of random trading, building, transfers, policies, challenges, with a save and reload every few steps).
 - **Window > General > Test Runner > PlayMode** (or `Unity -batchmode -runTests -testPlatform PlayMode`) runs the real game loop and clicks the real buttons, including 700 random clicks with junk typed into text fields; any console error fails the test.
 
+## Build the Mac app
+Menu **Trading Empire > Build macOS app**, or from the command line (close the editor first if it has this project open, or build from a copy):
+```bash
+Unity -batchmode -quit -projectPath . -executeMethod TradingEmpire.EditorTools.BuildMac.BuildCli -buildOutput Builds/macOS
+```
+The result is a universal (Apple silicon and Intel) `Trading Empire.app`, about 100 MB. It is not signed with a developer certificate, so the first time you open a copy that was downloaded, right-click it and choose Open. Saves live in `~/Library/Application Support/com.tradingempire.game/saves`.
+
 ## Opening in Unity
 Open the folder with Unity Hub (editor `6000.2.13f1`). Unity generates `.meta` files on first import; commit them afterwards.
