@@ -33,6 +33,12 @@ namespace TradingEmpire.Terminal
         float _toastUntil;
         int _lastToast;
         string _inspectedId;
+        /// <summary>The 3D city, for placing floating income numbers over buildings.</summary>
+        public CityView View;
+        RectTransform _floaterLayer;
+        readonly List<(Text text, float t0, string id, Color color)> _floaters = new List<(Text, float, string, Color)>();
+        int _lastPayoutSeq;
+        const float FloatSeconds = 1.8f;
 
         public static CityHud Build(Transform canvas, GameWorld world, Action openTerminal, Action openMenu = null)
         {
@@ -97,6 +103,8 @@ namespace TradingEmpire.Terminal
             BuildTransferPanel(root);
             BuildPolicyPanel(root);
 
+            _floaterLayer = Ui.Rect(root, "Floaters");
+            Ui.Stretch(_floaterLayer);
             var toastBg = Ui.Box(root, "Toast", new Color(0.1f, 0.14f, 0.2f, 0.96f));
             Ui.Place(toastBg.rectTransform, new Vector2(0.5f, 0), new Vector2(0.5f, 0), new Vector2(-330, 100), new Vector2(330, 140));
             _toast = Ui.Label(toastBg.transform, "", 14, Theme.Text, TextAnchor.MiddleCenter);
@@ -219,8 +227,43 @@ namespace TradingEmpire.Terminal
 
         // ---------------------------------------------------------------- refresh
 
+        void SpawnFloaters(PayoutBatch batch)
+        {
+            if (View == null || batch == null) return;
+            int n = 0;
+            foreach (var item in batch.Items)
+            {
+                if (n++ >= 10 || item.Amount.Cents == 0) continue;
+                var t = Ui.Label(_floaterLayer, item.Amount.ToSignedString().Replace(".00", ""), 17, item.Amount.Cents > 0 ? new Color(0.45f, 1f, 0.7f) : new Color(1f, 0.5f, 0.5f), TextAnchor.MiddleCenter, true, true);
+                t.rectTransform.anchorMin = t.rectTransform.anchorMax = new Vector2(0.5f, 0.5f);
+                t.rectTransform.sizeDelta = new Vector2(140, 26);
+                var shadow = t.gameObject.AddComponent<Shadow>();
+                shadow.effectColor = new Color(0, 0, 0, 0.8f); shadow.effectDistance = new Vector2(1.5f, -1.5f);
+                _floaters.Add((t, Time.unscaledTime, item.Id, t.color));
+            }
+        }
+
+        void AnimateFloaters()
+        {
+            if (View == null || View.Camera == null) return;
+            var canvas = GetComponentInParent<Canvas>();
+            var cam = canvas != null && canvas.renderMode != RenderMode.ScreenSpaceOverlay ? canvas.worldCamera : null;
+            for (int i = _floaters.Count - 1; i >= 0; i--)
+            {
+                var (text, t0, id, color) = _floaters[i];
+                float k = (Time.unscaledTime - t0) / FloatSeconds;
+                if (k >= 1f || text == null) { if (text != null) Ui.Kill(text.gameObject); _floaters.RemoveAt(i); continue; }
+                var top = View.TopOf(id);
+                var screen = (Vector2)View.Camera.WorldToScreenPoint(top);
+                RectTransformUtility.ScreenPointToLocalPointInRectangle(_floaterLayer, screen, cam, out var local);
+                text.rectTransform.anchoredPosition = local + new Vector2(0, k * 60f);
+                text.color = new Color(color.r, color.g, color.b, 1f - k * k);
+            }
+        }
+
         void Update()
         {
+            AnimateFloaters();
             if (_dirty) { _dirty = false; Refresh(); }
             if (_toast != null && _toast.transform.parent.gameObject.activeSelf && Time.unscaledTime > _toastUntil) _toast.transform.parent.gameObject.SetActive(false);
         }
@@ -264,6 +307,7 @@ namespace TradingEmpire.Terminal
                 Ui.SetButtonColor(b, active ? Theme.Blue : locked ? new Color(0.12f, 0.14f, 0.18f) : afford ? Theme.PanelAlt : new Color(0.2f, 0.12f, 0.14f));
             }
 
+            if (s.Payouts != null && s.Payouts.Seq != _lastPayoutSeq) { _lastPayoutSeq = s.Payouts.Seq; SpawnFloaters(s.Payouts); }
             RefreshInspector(s);
             RefreshTransfer();
             RefreshPolicies(s);

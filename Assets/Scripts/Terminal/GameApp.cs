@@ -37,7 +37,10 @@ namespace TradingEmpire.Terminal
         static void Start()
         {
             if (FindFirstObjectByType<GameApp>() != null) return;
-            Create(null, true, false);
+            // a debug aid: "-te-demo" shows a ready-made town and never touches your save
+            bool demo = Array.IndexOf(Environment.GetCommandLineArgs(), "-te-demo") >= 0;
+            var app = Create(null, !demo, demo);
+            if (demo) { DemoCity.Populate(app.World); app.World.Clock.SetSpeed(1); }
         }
 
         /// <summary>
@@ -103,6 +106,7 @@ namespace TradingEmpire.Terminal
             app._owned.Add(app.Audio.gameObject);
             app.Challenges = new ChallengeController(app.World, s => { app.Terminal.SetSession(s); if (s != app.World.Trading) app.Audio.Watch(s); });
             app.CityHud = CityHud.Build(canvasGo.transform, app.World, () => app.ShowTerminal(true), () => app.MenuHud.Show(true));
+            app.CityHud.View = app.CityView;
             app.Terminal = TerminalView.Build(canvasGo.transform, app.World.Trading, () => app.ShowTerminal(false), app.Challenges);
             app.MenuHud = MenuHud.Build(canvasGo.transform, app);
             app.ShowTerminal(false);

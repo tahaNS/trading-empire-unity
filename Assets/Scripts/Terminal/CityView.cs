@@ -8,27 +8,43 @@ using UnityEngine.EventSystems;
 namespace TradingEmpire.Terminal
 {
     /// <summary>
-    /// The 3D city: ground, streets, buildings as placeholder boxes (like the web version), a placement preview and an
-    /// isometric camera with pan and zoom. It only reads <see cref="CityGame"/> state; clicks go through its methods.
+    /// The 3D city, ported from the web version's look: detailed low-poly buildings (lit windows, awnings, rooftop units, fountains), paved lots in
+    /// district colours, streets with sidewalks, lamps and zebra crossings, trees, cars and pedestrians, a sun with soft shadows, construction
+    /// sites that grow with scaffolding, and an isometric camera with pan and zoom. It only reads <see cref="CityGame"/>; clicks go through its methods.
+    /// Everything is built in the web version's coordinates under a root that is mirrored on z, so the picture matches the browser game.
     /// </summary>
     public sealed class CityView : MonoBehaviour
     {
+        const float SiteMinScale = 0.15f, BuildAnimSeconds = 0.3f, PopSeconds = 0.7f;
+        static readonly Color Sky = new Color(0.749f, 0.89f, 0.961f);
+
         public CityGame City { get; private set; }
         public Camera Camera { get; private set; }
+        public bool Interactive = true;
 
-        Transform _root, _groundRoot, _buildingRoot, _ghostRoot;
-        readonly Dictionary<string, GameObject> _views = new Dictionary<string, GameObject>();
-        readonly Dictionary<string, string> _signature = new Dictionary<string, string>();
-        readonly Dictionary<int, Material> _materials = new Dictionary<int, Material>();
-        Material _baseMaterial;
-        GameObject _ownedPlane;
+        sealed class BuildingView
+        {
+            public GameObject Model, Lot, Scaffold;
+            public int Level;
+            public bool Built;
+            public float SpawnAt = -1, PopAt = -1;
+            public Mesh ModelMesh, LotMesh, ScaffoldMesh;
+        }
+
+        Transform _root, _static, _buildings, _ghostRoot;
+        Material _mat;
+        GameObject _ground, _plot, _props;
+        TrafficSystem _traffic;
+        readonly Dictionary<string, BuildingView> _views = new Dictionary<string, BuildingView>();
+        readonly Dictionary<string, Mesh> _modelCache = new Dictionary<string, Mesh>();
+        MaterialPropertyBlock _tintBlock;
         int _landTierDrawn = -1;
-        bool _dirty = true;
+        bool _dirty = true, _synced;
         float _nextSiteRefresh;
         Vector3 _focus = Vector3.zero;
-        float _zoom = 13f;
+        float _zoom = 9f;
         Vector3 _dragLast;
-        public bool Interactive = true;
+        double _moveTime;
 
         public static CityView Create(CityGame city, Camera camera)
         {
@@ -44,41 +60,66 @@ namespace TradingEmpire.Terminal
         void MarkDirty() { _dirty = true; }
         void OnDestroy() { if (City != null) City.Changed -= MarkDirty; }
 
+        // ---------------------------------------------------------------- setup
+
         void Setup()
         {
-            _root = transform;
-            _groundRoot = new GameObject("Ground").transform; _groundRoot.SetParent(_root, false);
-            _buildingRoot = new GameObject("Buildings").transform; _buildingRoot.SetParent(_root, false);
+            // everything below is in the web version's coordinates; mirroring z here makes the picture match the browser game
+            _tintBlock = new MaterialPropertyBlock();
+            _root = new GameObject("World").transform;
+            _root.SetParent(transform, false);
+            _root.localScale = new Vector3(1, 1, -1);
+            _static = new GameObject("Static").transform; _static.SetParent(_root, false);
+            _buildings = new GameObject("Buildings").transform; _buildings.SetParent(_root, false);
             _ghostRoot = new GameObject("Ghost").transform; _ghostRoot.SetParent(_root, false);
 
-            // our own tiny lit shader (in Resources, so it is always in a build); the standard shader gets stripped from builds
             var shader = Resources.Load<Shader>("CityLit");
-            if (shader != null && shader.isSupported) _baseMaterial = new Material(shader);
-            else
-            {
-                var probe = GameObject.CreatePrimitive(PrimitiveType.Cube);
-                _baseMaterial = probe.GetComponent<Renderer>().sharedMaterial;
-                DestroyImmediate(probe);
-            }
+            _mat = shader != null && shader.isSupported ? new Material(shader) : new Material(Shader.Find("Sprites/Default"));
 
-            BuildGround();
+            _ground = Mesh("Ground", CityScenery.Ground(City.Grid), true, false); // the ground only receives shadows (casting them onto itself causes streaks)
+            RebuildLand();
             SetupCamera();
             SetupLight();
+        }
+
+        GameObject Mesh(string name, Mesh mesh, bool receive, bool cast, Transform parent = null)
+        {
+            var go = new GameObject(name, typeof(MeshFilter), typeof(MeshRenderer));
+            go.transform.SetParent(parent ?? _static, false);
+            go.GetComponent<MeshFilter>().sharedMesh = mesh;
+            var r = go.GetComponent<MeshRenderer>();
+            r.sharedMaterial = _mat;
+            r.receiveShadows = receive;
+            r.shadowCastingMode = cast ? UnityEngine.Rendering.ShadowCastingMode.On : UnityEngine.Rendering.ShadowCastingMode.Off;
+            return go;
+        }
+
+        void RebuildLand()
+        {
+            if (_plot != null) Ui.Kill(_plot);
+            if (_props != null) Ui.Kill(_props);
+            if (_traffic != null) _traffic.Destroy();
+            _plot = Mesh("Plot", CityScenery.Plot(City.Grid), true, false);
+            _props = Mesh("Props", CityScenery.Props(City.Grid), true, true);
+            _traffic = new TrafficSystem(City.Grid, _static, _mat, City.Grid.Buildable);
+            _landTierDrawn = City.State.LandTier;
         }
 
         void SetupCamera()
         {
             Camera.orthographic = true;
-            Camera.orthographicSize = _zoom;
             Camera.clearFlags = CameraClearFlags.SolidColor;
-            Camera.backgroundColor = new Color(0.55f, 0.74f, 0.88f);
-            Camera.transform.rotation = Quaternion.Euler(33f, 45f, 0f);
+            Camera.backgroundColor = Sky;
+            Camera.nearClipPlane = 0.1f;
+            Camera.farClipPlane = 300f;
+            // looking at the city from the web version's (1,1,1) corner; z is mirrored, so in the world that is (1,1,-1)
+            Camera.transform.rotation = Quaternion.Euler(35.264f, 315f, 0f);
             ApplyCamera();
         }
 
         void ApplyCamera()
         {
-            Camera.transform.position = _focus - Camera.transform.forward * 60f;
+            Camera.transform.position = _focus - Camera.transform.forward * 80f;
             Camera.orthographicSize = _zoom;
         }
 
@@ -90,188 +131,151 @@ namespace TradingEmpire.Terminal
                 light = new GameObject("Sun", typeof(Light)).GetComponent<Light>();
                 light.type = LightType.Directional;
             }
-            light.transform.rotation = Quaternion.Euler(52f, -35f, 0f);
-            light.intensity = 1.15f;
-            light.color = new Color(1f, 0.96f, 0.88f);
-            RenderSettings.ambientMode = UnityEngine.Rendering.AmbientMode.Flat;
-            RenderSettings.ambientLight = new Color(0.55f, 0.58f, 0.66f);
-        }
-
-        // ---------------------------------------------------------------- materials / primitives
-
-        Material MaterialFor(Color c)
-        {
-            int key = ((int)(c.r * 255) << 24) ^ ((int)(c.g * 255) << 16) ^ ((int)(c.b * 255) << 8) ^ (int)(c.a * 255);
-            if (!_materials.TryGetValue(key, out var m))
-            {
-                m = new Material(_baseMaterial) { color = c };
-                if (m.HasProperty("_Glossiness")) m.SetFloat("_Glossiness", 0.05f);
-                _materials[key] = m;
-            }
-            return m;
-        }
-
-        GameObject Box(Transform parent, string name, Vector3 center, Vector3 size, Color color)
-        {
-            var go = GameObject.CreatePrimitive(PrimitiveType.Cube);
-            go.name = name;
-            DestroyImmediate(go.GetComponent<Collider>());
-            go.transform.SetParent(parent, false);
-            go.transform.localPosition = center;
-            go.transform.localScale = size;
-            go.GetComponent<Renderer>().sharedMaterial = MaterialFor(color);
-            return go;
-        }
-
-        GameObject Ball(Transform parent, Vector3 center, float diameter, Color color)
-        {
-            var go = GameObject.CreatePrimitive(PrimitiveType.Sphere);
-            DestroyImmediate(go.GetComponent<Collider>());
-            go.transform.SetParent(parent, false);
-            go.transform.localPosition = center;
-            go.transform.localScale = Vector3.one * diameter;
-            go.GetComponent<Renderer>().sharedMaterial = MaterialFor(color);
-            return go;
-        }
-
-        // ---------------------------------------------------------------- ground and streets
-
-        void BuildGround()
-        {
-            int w = City.Grid.Width, h = City.Grid.Height;
-            Box(_groundRoot, "Base", new Vector3(0, -0.6f, 0), new Vector3(w + 4, 1f, h + 4), new Color(0.30f, 0.42f, 0.30f));
-            // a soft chequer on the whole map so the grid reads, darker outside your land
-            for (int y = 0; y < h; y++)
-                for (int x = 0; x < w; x++)
-                {
-                    var c = new Cell(x, y);
-                    var (wx, wz) = City.Grid.CellToWorld(c);
-                    if (Roads.IsRoadCell(c))
-                    {
-                        Box(_groundRoot, "Road", new Vector3(wx, 0.01f, wz), new Vector3(1f, 0.04f, 1f), new Color(0.22f, 0.23f, 0.26f));
-                        var kind = Roads.KindOf(c);
-                        if (kind != Roads.Kind.Cross)
-                        {
-                            bool ns = kind == Roads.Kind.NorthSouth;
-                            Box(_groundRoot, "Lane", new Vector3(wx, 0.04f, wz), new Vector3(ns ? 0.06f : 0.4f, 0.01f, ns ? 0.4f : 0.06f), new Color(0.85f, 0.82f, 0.5f));
-                        }
-                    }
-                }
-            RebuildLand();
-        }
-
-        void RebuildLand()
-        {
-            if (_ownedPlane != null) Ui.Kill(_ownedPlane);
-            var a = City.Grid.Buildable;
-            var (x0, z0) = City.Grid.CellToWorld(new Cell(a.X, a.Y));
-            float cx = x0 + (a.W - 1) / 2f, cz = z0 + (a.H - 1) / 2f;
-            // owned land: a lighter lawn under the streets
-            _ownedPlane = new GameObject("Owned land");
-            _ownedPlane.transform.SetParent(_groundRoot, false);
-            for (int y = a.Y; y < a.Y + a.H; y++)
-                for (int x = a.X; x < a.X + a.W; x++)
-                {
-                    var c = new Cell(x, y);
-                    if (Roads.IsRoadCell(c)) continue;
-                    var (wx, wz) = City.Grid.CellToWorld(c);
-                    bool alt = (x + y) % 2 == 0;
-                    Box(_ownedPlane.transform, "Lawn", new Vector3(wx, 0.0f, wz), new Vector3(1f, 0.03f, 1f), alt ? new Color(0.50f, 0.74f, 0.42f) : new Color(0.46f, 0.70f, 0.39f));
-                }
-            _landTierDrawn = City.State.LandTier;
+            // the web sun stands at (15, 25, 10); with z mirrored the light travels towards (-15, -25, +10)
+            light.transform.rotation = Quaternion.LookRotation(new Vector3(-15f, -25f, 10f).normalized);
+            light.color = new Color(1f, 0.94f, 0.84f);
+            light.intensity = 0.95f;
+            light.shadows = LightShadows.Soft;
+            light.shadowStrength = 0.6f;
+            light.shadowBias = 0.06f;
+            light.shadowNormalBias = 0.8f;
+            QualitySettings.shadows = ShadowQuality.All;
+            QualitySettings.shadowResolution = ShadowResolution.VeryHigh;
+            QualitySettings.shadowDistance = 100f;
+            QualitySettings.shadowCascades = 1;
+            QualitySettings.shadowProjection = ShadowProjection.StableFit;
+            // the web hemisphere light: sky 0xdff1ff over ground 0x6f8d52
+            RenderSettings.ambientMode = UnityEngine.Rendering.AmbientMode.Trilight;
+            RenderSettings.ambientSkyColor = new Color(0.875f, 0.945f, 1f) * 0.62f;
+            RenderSettings.ambientEquatorColor = new Color(0.66f, 0.76f, 0.7f) * 0.6f;
+            RenderSettings.ambientGroundColor = new Color(0.435f, 0.553f, 0.322f) * 0.62f;
         }
 
         // ---------------------------------------------------------------- buildings
 
-        static string SignatureOf(BuildingState b, TradingRecord record, bool onFire)
+        Mesh ModelFor(BuildingDefinition def, int level, int seed)
         {
-            int level = Landmarks.EffectiveLevel(b.Level, Buildings.Get(b.DefId), record);
-            return b.Status + ":" + level + ":" + onFire + ":" + (b.Status == BuildStatus.Building ? 0 : 1);
+            // the colour of a building varies with its seed, so models are cached per (type, level, seed)
+            string key = def.Id + ":" + level + ":" + seed;
+            if (!_modelCache.TryGetValue(key, out var mesh))
+            {
+                mesh = BuildingModels.Build(def, level, seed).ToMesh(def.Id + " L" + level);
+                _modelCache[key] = mesh;
+            }
+            return mesh;
         }
 
-        void SyncBuildings()
+        void SyncBuildings(bool animate)
         {
             var state = City.State;
             var live = new HashSet<string>(state.Buildings.Select(b => b.Id));
-            foreach (var id in _views.Keys.Where(id => !live.Contains(id)).ToList()) { Ui.Kill(_views[id]); _views.Remove(id); _signature.Remove(id); }
+            foreach (var id in _views.Keys.Where(id => !live.Contains(id)).ToList()) { DestroyView(_views[id]); _views.Remove(id); }
             foreach (var b in state.Buildings)
             {
-                bool fire = state.Events.Any(e => e.Kind == EventKind.Fire && e.BuildingId == b.Id);
-                // buildings under construction grow with time, so they are refreshed every sync
-                string sig = SignatureOf(b, state.Record, fire);
-                if (b.Status == BuildStatus.Building || !_signature.TryGetValue(b.Id, out var old) || old != sig)
+                var def = Buildings.Get(b.DefId);
+                int level = Landmarks.EffectiveLevel(b.Level, def, state.Record);
+                bool built = b.Status == BuildStatus.Complete;
+                bool onFire = state.Events.Any(e => e.Kind == EventKind.Fire && e.BuildingId == b.Id);
+                _views.TryGetValue(b.Id, out var v);
+                // an upgrade (or a landmark's new trading level) replaces the model
+                if (v != null && v.Level != level) { Ui.Kill(v.Model); v.Model = null; }
+                if (v == null)
                 {
-                    if (_views.TryGetValue(b.Id, out var prev)) Ui.Kill(prev);
-                    _views[b.Id] = BuildBuilding(b, fire, state);
-                    _signature[b.Id] = sig;
+                    v = new BuildingView { Level = level, Built = built };
+                    _views[b.Id] = v;
+                    var (cx, cz) = City.Grid.FootprintCenter(b.Origin, def.Footprint, b.Rotation);
+                    var fp = CityGrid.Rotated(def.Footprint, b.Rotation);
+                    v.LotMesh = CityScenery.Lot(def.District, fp.W, fp.H, built);
+                    v.Lot = Mesh("Lot " + b.Id, v.LotMesh, true, false, _buildings);
+                    v.Lot.transform.localPosition = new Vector3(cx, 0.01f, cz);
+                    if (animate && _synced) v.SpawnAt = Time.unscaledTime;
                 }
+                if (v.Model == null)
+                {
+                    var (cx, cz) = City.Grid.FootprintCenter(b.Origin, def.Footprint, b.Rotation);
+                    v.Level = level;
+                    v.ModelMesh = ModelFor(def, level, BuildingModels.SeedOf(b.Id));
+                    v.Model = Mesh("Building " + b.Id, v.ModelMesh, true, true, _buildings);
+                    v.Model.transform.localPosition = new Vector3(cx, 0f, cz);
+                    v.Model.transform.localRotation = Quaternion.Euler(0f, -b.Rotation * 90f, 0f);
+                    if (!animate || !_synced) v.SpawnAt = -1;
+                }
+                // a finished site: bare earth becomes the district's paving, with a little bounce
+                if (built && !v.Built)
+                {
+                    v.Built = true;
+                    var (cx, cz) = City.Grid.FootprintCenter(b.Origin, def.Footprint, b.Rotation);
+                    var fp = CityGrid.Rotated(def.Footprint, b.Rotation);
+                    v.LotMesh = CityScenery.Lot(def.District, fp.W, fp.H, true);
+                    v.Lot.GetComponent<MeshFilter>().sharedMesh = v.LotMesh;
+                    if (animate && _synced) v.PopAt = Time.unscaledTime;
+                    if (v.Scaffold != null) { Ui.Kill(v.Scaffold); v.Scaffold = null; }
+                }
+                if (!built && v.Scaffold == null)
+                {
+                    var fp = CityGrid.Rotated(def.Footprint, b.Rotation);
+                    v.ScaffoldMesh = CityScenery.Scaffold(fp.W * 0.9f, fp.H * 0.9f, def.Height * 1.1f);
+                    v.Scaffold = Mesh("Scaffold " + b.Id, v.ScaffoldMesh, false, false, _buildings);
+                    var (cx, cz) = City.Grid.FootprintCenter(b.Origin, def.Footprint, b.Rotation);
+                    v.Scaffold.transform.localPosition = new Vector3(cx, 0f, cz);
+                }
+                // a fire darkens the building
+                var r = v.Model.GetComponent<MeshRenderer>();
+                if (onFire) { _tintBlock.SetColor("_Tint", new Color(0.2f, 0.12f, 0.1f)); _tintBlock.SetFloat("_TintAmt", 0.7f); r.SetPropertyBlock(_tintBlock); }
+                else r.SetPropertyBlock(null);
             }
+            _synced = true;
+            ApplyScales(animate);
         }
 
-        GameObject BuildBuilding(BuildingState b, bool onFire, CityState state)
+        void DestroyView(BuildingView v)
         {
-            var def = Buildings.Get(b.DefId);
-            var root = new GameObject("Building " + b.Id).transform;
-            root.SetParent(_buildingRoot, false);
-            var fp = CityGrid.Rotated(def.Footprint, b.Rotation);
-            var (cx, cz) = City.Grid.FootprintCenter(b.Origin, def.Footprint, b.Rotation);
-            root.localPosition = new Vector3(cx, 0, cz);
-            int level = Landmarks.EffectiveLevel(b.Level, def, state.Record);
-            Color baseColor = ColorOf(def.Color);
-            float height = def.Height * (1f + 0.22f * (level - 1));
-            float w = fp.W - 0.16f, d = fp.H - 0.16f;
-
-            if (b.Status == BuildStatus.Building)
-            {
-                double progress = Math.Max(0.05, Math.Min(1, (City.Clock.Time - b.BuiltAt) / (double)Math.Max(1, b.CompletesAt - b.BuiltAt)));
-                Box(root, "Site", new Vector3(0, 0.05f, 0), new Vector3(fp.W - 0.05f, 0.1f, fp.H - 0.05f), new Color(0.62f, 0.55f, 0.42f));
-                float hh = (float)(height * progress);
-                Box(root, "Frame", new Vector3(0, hh / 2, 0), new Vector3(w, hh, d), Color.Lerp(baseColor, new Color(0.7f, 0.7f, 0.7f), 0.55f));
-                Box(root, "Crane", new Vector3(w / 2 - 0.1f, height * 0.5f + 0.4f, d / 2 - 0.1f), new Vector3(0.08f, height + 0.8f, 0.08f), new Color(0.95f, 0.75f, 0.2f));
-                return root.gameObject;
-            }
-
-            if (onFire) baseColor = Color.Lerp(baseColor, new Color(0.2f, 0.12f, 0.1f), 0.7f);
-
-            if (def.Category == BuildingCategory.Recreation)
-            {
-                Box(root, "Green", new Vector3(0, 0.08f, 0), new Vector3(fp.W - 0.1f, 0.16f, fp.H - 0.1f), baseColor);
-                if (def.Id == "plaza") Box(root, "Fountain", new Vector3(0, 0.3f, 0), new Vector3(1.1f, 0.5f, 1.1f), new Color(0.55f, 0.75f, 0.9f));
-                int trees = 2 + level;
-                var rnd = new System.Random(b.Id.GetHashCode());
-                for (int i = 0; i < trees; i++)
-                {
-                    float tx = ((float)rnd.NextDouble() - 0.5f) * (fp.W - 0.6f), tz = ((float)rnd.NextDouble() - 0.5f) * (fp.H - 0.6f);
-                    Box(root, "Trunk", new Vector3(tx, 0.3f, tz), new Vector3(0.1f, 0.6f, 0.1f), new Color(0.4f, 0.28f, 0.18f));
-                    Ball(root, new Vector3(tx, 0.8f, tz), 0.7f, new Color(0.25f, 0.6f, 0.28f));
-                }
-                return root.gameObject;
-            }
-
-            Box(root, "Body", new Vector3(0, height / 2, 0), new Vector3(w, height, d), baseColor);
-            // a darker roof slab and a few lit windows so the boxes read as buildings
-            Color roof = Color.Lerp(baseColor, Color.black, 0.35f);
-            Box(root, "Roof", new Vector3(0, height + 0.06f, 0), new Vector3(w + 0.08f, 0.12f, d + 0.08f), roof);
-            if (level >= 2) Box(root, "Penthouse", new Vector3(0, height + 0.3f, 0), new Vector3(w * 0.5f, 0.35f, d * 0.5f), roof);
-            if (level >= 3) Box(root, "Spire", new Vector3(0, height + 0.8f, 0), new Vector3(0.12f, 0.9f, 0.12f), new Color(0.85f, 0.85f, 0.9f));
-            var win = new Color(1f, 0.93f, 0.6f);
-            int rows = Mathf.Max(1, (int)(height / 1.1f));
-            for (int r = 0; r < rows; r++)
-            {
-                float y = 0.5f + r * 1.1f;
-                if (y > height - 0.3f) break;
-                for (int i = 0; i < fp.W; i++)
-                {
-                    float x = -fp.W / 2f + 0.5f + i;
-                    Box(root, "Win", new Vector3(x, y, -d / 2 - 0.005f), new Vector3(0.4f, 0.4f, 0.02f), win);
-                    Box(root, "Win", new Vector3(w / 2 + 0.005f, y, -fp.H / 2f + 0.5f + i), new Vector3(0.02f, 0.4f, 0.4f), win);
-                }
-            }
-            if (onFire) Ball(root, new Vector3(0, height + 0.5f, 0), 0.9f, new Color(1f, 0.4f, 0.1f));
-            return root.gameObject;
+            if (v.Model != null) Ui.Kill(v.Model);
+            if (v.Lot != null) Ui.Kill(v.Lot);
+            if (v.Scaffold != null) Ui.Kill(v.Scaffold);
         }
 
-        static Color ColorOf(int rgb) { return new Color(((rgb >> 16) & 255) / 255f, ((rgb >> 8) & 255) / 255f, (rgb & 255) / 255f); }
+        /// <summary>The height of each model: growing with construction progress, the pop-in when a site is created, and the finished bounce.</summary>
+        void ApplyScales(bool animate)
+        {
+            float now = Time.unscaledTime;
+            double simNow = City.Clock.Time;
+            foreach (var b in City.State.Buildings)
+            {
+                if (!_views.TryGetValue(b.Id, out var v) || v.Model == null) continue;
+                float target = 1f;
+                if (b.Status == BuildStatus.Building)
+                {
+                    double k = (simNow - b.BuiltAt) / Math.Max(b.CompletesAt - b.BuiltAt, 1.0);
+                    target = SiteMinScale + (1f - SiteMinScale) * (float)Math.Min(Math.Max(k, 0), 1);
+                }
+                float y = target;
+                if (animate && v.SpawnAt >= 0)
+                {
+                    float k = Mathf.Min((now - v.SpawnAt) / BuildAnimSeconds, 1f);
+                    y = target * (0.05f + 0.95f * (1f - Mathf.Pow(1f - k, 3f)));
+                    if (k >= 1f) v.SpawnAt = -1;
+                }
+                float squash = 0f;
+                if (animate && v.PopAt >= 0)
+                {
+                    float k = (now - v.PopAt) / PopSeconds;
+                    if (k >= 1f) v.PopAt = -1; else squash = Mathf.Sin(k * Mathf.PI * 3f) * (1f - k) * 0.14f;
+                }
+                v.Model.transform.localScale = new Vector3(1f - squash * 0.5f, y * (1f + squash), 1f - squash * 0.5f);
+                if (v.Scaffold != null) v.Scaffold.transform.localScale = new Vector3(1f, Mathf.Max(target, 0.2f), 1f);
+            }
+        }
+
+        /// <summary>The world position of a building's top (for floating text).</summary>
+        public Vector3 TopOf(string buildingId)
+        {
+            var b = City.State.Buildings.FirstOrDefault(x => x.Id == buildingId);
+            if (b == null) return Vector3.zero;
+            var def = Buildings.Get(b.DefId);
+            var (cx, cz) = City.Grid.FootprintCenter(b.Origin, def.Footprint, b.Rotation);
+            return _root.TransformPoint(new Vector3(cx, def.Height + 0.6f, cz));
+        }
 
         // ---------------------------------------------------------------- placement preview, selection
 
@@ -280,16 +284,23 @@ namespace TradingEmpire.Terminal
             for (int i = _ghostRoot.childCount - 1; i >= 0; i--) Ui.Kill(_ghostRoot.GetChild(i).gameObject);
             var p = City.State.Placement;
             var hover = City.State.Hover;
-            var sel = City.State.SelectedId;
             if (p != null && hover != null)
             {
                 var def = Buildings.Get(p.DefId);
                 var fp = CityGrid.Rotated(def.Footprint, p.Rotation);
                 var (cx, cz) = City.Grid.FootprintCenter(hover.Origin, def.Footprint, p.Rotation);
-                Color col = hover.Check.Ok ? new Color(0.3f, 0.9f, 0.45f) : new Color(0.95f, 0.3f, 0.3f);
-                Box(_ghostRoot, "Ghost tile", new Vector3(cx, 0.1f, cz), new Vector3(fp.W, 0.06f, fp.H), col);
-                Box(_ghostRoot, "Ghost", new Vector3(cx, def.Height * 0.5f + 0.1f, cz), new Vector3(fp.W - 0.3f, def.Height, fp.H - 0.3f), Color.Lerp(ColorOf(def.Color), col, 0.55f));
+                var col = hover.Check.Ok ? new Color(0.24f, 0.86f, 0.52f) : new Color(0.9f, 0.28f, 0.31f);
+                var tile = new MeshBuilder();
+                tile.Box(fp.W, 0.05f, fp.H, 0, 0, 0, col, 0, null, 0, 0, 0, 1, 1f);
+                var tileGo = Mesh("Ghost tile", tile.ToMesh("tile"), false, false, _ghostRoot);
+                tileGo.transform.localPosition = new Vector3(cx, 0.08f, cz);
+                var model = Mesh("Ghost", ModelFor(def, 1, 0), false, false, _ghostRoot);
+                model.transform.localPosition = new Vector3(cx, 0.06f, cz);
+                model.transform.localRotation = Quaternion.Euler(0f, -p.Rotation * 90f, 0f);
+                _tintBlock.SetColor("_Tint", col); _tintBlock.SetFloat("_TintAmt", 0.5f);
+                model.GetComponent<MeshRenderer>().SetPropertyBlock(_tintBlock);
             }
+            var sel = City.State.SelectedId;
             if (sel != null)
             {
                 var b = City.State.Buildings.FirstOrDefault(x => x.Id == sel);
@@ -298,7 +309,13 @@ namespace TradingEmpire.Terminal
                     var def = Buildings.Get(b.DefId);
                     var fp = CityGrid.Rotated(def.Footprint, b.Rotation);
                     var (cx, cz) = City.Grid.FootprintCenter(b.Origin, def.Footprint, b.Rotation);
-                    Box(_ghostRoot, "Selection", new Vector3(cx, 0.08f, cz), new Vector3(fp.W + 0.3f, 0.05f, fp.H + 0.3f), new Color(1f, 0.85f, 0.3f));
+                    var ring = new MeshBuilder();
+                    var gold = new Color(1f, 0.85f, 0.3f);
+                    float w = fp.W + 0.25f, d = fp.H + 0.25f, t = 0.07f;
+                    ring.Box(w, 0.05f, t, 0, 0, d / 2, gold, 0, null, 0, 0, 0, 1, 1f); ring.Box(w, 0.05f, t, 0, 0, -d / 2, gold, 0, null, 0, 0, 0, 1, 1f);
+                    ring.Box(t, 0.05f, d, w / 2, 0, 0, gold, 0, null, 0, 0, 0, 1, 1f); ring.Box(t, 0.05f, d, -w / 2, 0, 0, gold, 0, null, 0, 0, 0, 1, 1f);
+                    var go = Mesh("Selection", ring.ToMesh("selection"), false, false, _ghostRoot);
+                    go.transform.localPosition = new Vector3(cx, 0.07f, cz);
                 }
             }
         }
@@ -308,38 +325,42 @@ namespace TradingEmpire.Terminal
         void Update()
         {
             if (City.State.LandTier != _landTierDrawn) RebuildLand();
-            if (!Interactive) { if (_dirty) Sync(); return; }
-            HandleCamera();
-            HandleMouse();
+            if (_traffic != null) _traffic.Animate(Time.unscaledDeltaTime, City.Clock.Speed > 0 && Interactive);
+            if (Interactive) { HandleCamera(); HandleMouse(); }
             if (_dirty) Sync();
-            else if (Time.unscaledTime > _nextSiteRefresh && City.State.Buildings.Any(b => b.Status == BuildStatus.Building))
-            {
-                // buildings under construction grow smoothly, a few times a second
-                _nextSiteRefresh = Time.unscaledTime + 0.25f;
-                SyncBuildings();
-            }
+            else if (_views.Count > 0) ApplyScales(true);
         }
 
         void Sync()
         {
             _dirty = false;
-            SyncBuildings();
+            SyncBuildings(true);
             SyncGhost();
         }
 
-        /// <summary>Redraw now (used by the screenshot tool, where Update does not run).</summary>
-        public void SyncNow() { if (City.State.LandTier != _landTierDrawn) RebuildLand(); Sync(); ApplyCamera(); }
+        /// <summary>Redraw now with no animation (used by the screenshot tool, where Update does not run).</summary>
+        public void SyncNow()
+        {
+            if (City.State.LandTier != _landTierDrawn) RebuildLand();
+            _dirty = false;
+            SyncBuildings(false);
+            SyncGhost();
+            ApplyCamera();
+        }
 
         public void SetCamera(Vector3 focus, float zoom) { _focus = focus; _zoom = zoom; ApplyCamera(); }
+
+        // ---------------------------------------------------------------- camera and mouse
 
         void HandleCamera()
         {
             float scroll = Input.mouseScrollDelta.y;
-            if (Mathf.Abs(scroll) > 0.01f && !PointerOverUi()) { _zoom = Mathf.Clamp(_zoom * (scroll > 0 ? 0.9f : 1.1f), 5f, 24f); }
+            if (Mathf.Abs(scroll) > 0.01f && !PointerOverUi()) _zoom = Mathf.Clamp(_zoom * (scroll > 0 ? 0.9f : 1.1f), 4f, 28f);
             var right = Camera.transform.right; right.y = 0; right.Normalize();
             var fwd = Camera.transform.forward; fwd.y = 0; fwd.Normalize();
             Vector3 move = Vector3.zero;
-            bool typing = EventSystem.current != null && EventSystem.current.currentSelectedGameObject != null && EventSystem.current.currentSelectedGameObject.GetComponent<UnityEngine.UI.InputField>() != null;
+            var es = EventSystem.current;
+            bool typing = es != null && es.currentSelectedGameObject != null && es.currentSelectedGameObject.GetComponent<UnityEngine.UI.InputField>() != null;
             if (!typing)
             {
                 if (Input.GetKey(KeyCode.W) || Input.GetKey(KeyCode.UpArrow)) move += fwd;
@@ -347,16 +368,16 @@ namespace TradingEmpire.Terminal
                 if (Input.GetKey(KeyCode.D) || Input.GetKey(KeyCode.RightArrow)) move += right;
                 if (Input.GetKey(KeyCode.A) || Input.GetKey(KeyCode.LeftArrow)) move -= right;
             }
-            _focus += move * (_zoom * 0.9f * Time.unscaledDeltaTime);
+            _focus += move * (_zoom * 1.2f * Time.unscaledDeltaTime);
             if (Input.GetMouseButtonDown(1) || Input.GetMouseButtonDown(2)) _dragLast = Input.mousePosition;
             if (Input.GetMouseButton(1) || Input.GetMouseButton(2))
             {
                 var delta = Input.mousePosition - _dragLast;
                 _dragLast = Input.mousePosition;
                 float k = _zoom * 2f / Screen.height;
-                _focus -= (right * delta.x + fwd * delta.y / Mathf.Cos(33f * Mathf.Deg2Rad)) * k;
+                _focus -= (right * delta.x + fwd * delta.y / Mathf.Sin(35.264f * Mathf.Deg2Rad)) * k;
             }
-            float limit = City.Grid.Width * 0.6f;
+            float limit = City.Grid.Width * 0.5f - 3f;
             _focus = new Vector3(Mathf.Clamp(_focus.x, -limit, limit), 0, Mathf.Clamp(_focus.z, -limit, limit));
             ApplyCamera();
         }
@@ -369,8 +390,8 @@ namespace TradingEmpire.Terminal
             var ray = Camera.ScreenPointToRay(Input.mousePosition);
             var plane = new Plane(Vector3.up, Vector3.zero);
             if (!plane.Raycast(ray, out float t)) return false;
-            var hit = ray.GetPoint(t);
-            cell = City.Grid.WorldToCell(hit.x, hit.z);
+            var local = _root.InverseTransformPoint(ray.GetPoint(t));
+            cell = City.Grid.WorldToCell(local.x, local.z);
             return City.Grid.IsInBounds(cell);
         }
 

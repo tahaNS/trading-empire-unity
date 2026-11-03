@@ -43,6 +43,8 @@ dotnet test
 
 Phase 5 (done): sound (all synthesised: effects for trades, building, rent, missions, plus a city hum that follows size and mood; a sound on/off setting) and chart drawings (tool strip: lines, rays, trend, channel, rectangle, ellipse, Fibonacci retracement and extension, text, price label, markers, long and short boxes; select, drag, reshape, colour, width, dash, lock, hide, delete; saved with the game in the web version's format, so all 21 kinds survive a save even where they are not drawn yet).
 
+The 3D city matches the browser game's look: detailed low-poly buildings with lit and dark windows, striped awnings, balconies, rooftop units, pitched-roof houses, a hotel pool, a fountain plaza and the Trading HQ ticker; paved lots in district colours; streets with sidewalks, lane dashes, zebra crossings and lamps; trees on unowned land and along the streets; cars and pedestrians; a sun with soft shadows; construction sites with scaffolding that grow, and a bounce when finished; floating rent numbers. Everything is generated in code from the web version's own numbers (no art files). `-te-demo` shows a ready-made town (it never touches your save).
+
 Not ported from the web version: indicators, the other drawing kinds (regression channel, pitchfork, Gann fan, Fibonacci channel / time zones / fan / arcs are kept and shown as outlines), photo mode and fly-over, Electron packaging.
 
 ## Tests

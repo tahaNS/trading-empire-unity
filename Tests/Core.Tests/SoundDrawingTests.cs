@@ -254,3 +254,49 @@ public class DrawingSaveTests
         Assert.Contains("no id or kind", new SaveManager(GameWorld.Create(), new MemorySaveStorage()).Import(Json.Serialize(doc2)).Error);
     }
 }
+
+public class SceneryTests
+{
+    [Fact]
+    public void Forest_is_deterministic_and_never_grows_on_or_next_to_your_land()
+    {
+        var a = Scenery.TreePlacements(32, 32, 1f, Land.StartingArea);
+        var b = Scenery.TreePlacements(32, 32, 1f, Land.StartingArea);
+        Assert.Equal(a.Count, b.Count);
+        Assert.InRange(a.Count, 100, 220);
+        foreach (var t in a)
+        {
+            float gx = t.X + 16, gy = t.Z + 16;
+            Assert.False(gx >= Land.StartingArea.X - 1 && gx < Land.StartingArea.X + Land.StartingArea.W + 1 && gy >= Land.StartingArea.Y - 1 && gy < Land.StartingArea.Y + Land.StartingArea.H + 1);
+        }
+        // buying land only clears trees: every remaining tree was there before
+        var bigger = Scenery.TreePlacements(32, 32, 1f, Land.Tiers[0].Area);
+        Assert.True(bigger.Count < a.Count);
+        Assert.All(bigger, t => Assert.Contains(a, x => Math.Abs(x.X - t.X) < 1e-4 && Math.Abs(x.Z - t.Z) < 1e-4));
+    }
+
+    [Fact]
+    public void Street_details_match_the_layout_rules()
+    {
+        Assert.Equal(4, Scenery.Crosswalks(Land.StartingArea).Count);
+        Assert.Equal(4, Scenery.IntersectionCorners(Land.StartingArea).Count);
+        foreach (var (cell, _) in Scenery.StreetTrees(new RectI(0, 0, 32, 32))) Assert.NotEqual(Roads.Kind.Cross, Roads.KindOf(cell));
+        Assert.NotEmpty(Scenery.LampPlacements(32, 32, 1f, Land.StartingArea));
+    }
+
+    [Fact]
+    public void Lanes_loop_along_roads_and_every_lane_has_a_mover()
+    {
+        var lanes = Scenery.CarLanes(Land.StartingArea);
+        Assert.Equal(4, lanes.Count); // one column road and one row road, two directions each
+        foreach (var l in lanes)
+        {
+            Assert.True(Scenery.MoversFor(l, 3.5f) >= 1);
+            var p0 = Scenery.LanePoint(l, 0); var p1 = Scenery.LanePoint(l, l.Length); // a full loop comes back to the start
+            Assert.Equal(p0.x, p1.x, 3); Assert.Equal(p0.y, p1.y, 3);
+        }
+        var walk = Scenery.WalkLanes(Land.StartingArea);
+        Assert.Equal(lanes.Count, walk.Count);
+        Assert.NotEqual(lanes[0].Offset, walk[0].Offset);
+    }
+}
