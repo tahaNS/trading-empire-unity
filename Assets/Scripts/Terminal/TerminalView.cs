@@ -42,7 +42,9 @@ namespace TradingEmpire.Terminal
 
         static readonly int[] Speeds = MarketReplay.Speeds;
 
-        public static TerminalView Build(Transform canvas, TradingSession session)
+        Action _onBack;
+
+        public static TerminalView Build(Transform canvas, TradingSession session, Action onBack = null)
         {
             var root = Ui.Rect(canvas, "Terminal");
             Ui.Stretch(root);
@@ -50,6 +52,7 @@ namespace TradingEmpire.Terminal
             bg.color = Theme.Bg;
             var view = root.gameObject.AddComponent<TerminalView>();
             view.Session = session;
+            view._onBack = onBack;
             view.BuildUi(root);
             session.Changed += view.MarkDirty;
             return view;
@@ -111,11 +114,16 @@ namespace TradingEmpire.Terminal
             Ui.Place(badgeBg.rectTransform, new Vector2(0, 1), new Vector2(0, 1), new Vector2(770, -28), new Vector2(1060, -6));
             _badge = Ui.Label(badgeBg.transform, "SYNTHETIC TEST DATA - not real prices", 11, Theme.Accent, TextAnchor.MiddleCenter, false, true);
 
+            if (_onBack != null)
+            {
+                var back = Ui.Button(bar, "< Back to city", () => _onBack(), Theme.PanelAlt, 12);
+                Ui.Place((RectTransform)back.transform, new Vector2(1, 1), new Vector2(1, 1), new Vector2(-260, -28), new Vector2(-130, -6));
+            }
             var load = Ui.Button(bar, "Load data...", () => _loadPopover.gameObject.SetActive(!_loadPopover.gameObject.activeSelf), Theme.PanelAlt, 12);
             Ui.Place((RectTransform)load.transform, new Vector2(1, 1), new Vector2(1, 1), new Vector2(-120, -28), new Vector2(-10, -6));
 
             _progress = Ui.Label(bar, "", 12, Theme.Dim, TextAnchor.MiddleRight, true);
-            Ui.Place(_progress.rectTransform, new Vector2(1, 1), new Vector2(1, 1), new Vector2(-420, -30), new Vector2(-130, -4));
+            Ui.Place(_progress.rectTransform, new Vector2(1, 1), new Vector2(1, 1), new Vector2(-560, -30), new Vector2(-270, -4));
 
             // row 2: replay controls + timeframes
             float x = 12;
@@ -317,7 +325,6 @@ namespace TradingEmpire.Terminal
 
         void Update()
         {
-            if (Session.State.Status == SessionStatus.Ready) Session.Advance(Time.unscaledDeltaTime);
             HandleKeys();
             if (_dirty) { _dirty = false; Refresh(); }
             if (_toast != null && _toast.transform.parent.gameObject.activeSelf && Time.unscaledTime > _toastUntil)
@@ -327,6 +334,7 @@ namespace TradingEmpire.Terminal
         void HandleKeys()
         {
             if (GUIUtility.keyboardControl != 0 || UnityEngine.EventSystems.EventSystem.current?.currentSelectedGameObject?.GetComponent<InputField>() != null) return;
+            if (Input.GetKeyDown(KeyCode.Escape) && _onBack != null) _onBack();
             if (Input.GetKeyDown(KeyCode.Space)) Session.TogglePlay();
             if (Input.GetKeyDown(KeyCode.RightArrow)) { if (Input.GetKey(KeyCode.LeftShift) || Input.GetKey(KeyCode.RightShift)) Session.StepBar(); else Session.Step(); }
             if (Input.GetKeyDown(KeyCode.L)) Submit(Direction.Buy);
