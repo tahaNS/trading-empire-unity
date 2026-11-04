@@ -22,6 +22,7 @@ This is the Unity version (Unity 6, `6000.2.13f1`). It is a full port of the bro
 9. [All the keys](#all-the-keys)
 10. [Run it, build it, test it](#run-it-build-it-test-it)
 11. [For developers](#for-developers)
+12. [License](#license)
 
 ---
 
@@ -298,3 +299,7 @@ Layout:
 - `Assets/Editor/` editor tools: render screens to PNG from the command line, build the Mac app.
 - `Tests/Core` a `netstandard2.1` project that compiles the same `Assets/Scripts/Core` files; `Tests/Core.Tests` xUnit tests ported from the web game so the expected numbers match.
 - `docs/` pictures, the sample data file and the trailer.
+
+## License
+
+MIT, see [LICENSE](LICENSE).
