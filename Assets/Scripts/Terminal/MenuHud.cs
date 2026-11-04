@@ -26,7 +26,7 @@ namespace TradingEmpire.Terminal
         int _tab;
         bool _dirty = true;
 
-        static readonly string[] TabNames = { "Game", "Missions", "Achievements", "Settings", "Help" };
+        static readonly string[] TabNames = { "Game", "Settings", "Help" };
         bool _photo;
         /// <summary>Photo mode hides the goal card with the rest of the interface.</summary>
         public void SetPhoto(bool on) { _photo = on; _dirty = true; }
@@ -179,9 +179,7 @@ namespace TradingEmpire.Terminal
             _title.text = "MENU  —  " + TabNames[_tab].ToUpperInvariant();
             _body.text = "";
             if (_tab == 0) GameTab();
-            else if (_tab == 1) MissionsTab();
-            else if (_tab == 2) AchievementsTab();
-            else if (_tab == 3) SettingsTab();
+            else if (_tab == 1) SettingsTab();
             else HelpTab();
             FitContent();
         }

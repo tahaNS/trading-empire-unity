@@ -157,7 +157,7 @@ namespace TradingEmpire.Terminal
             Ui.Place(row, new Vector2(0, 1), Vector2.one, new Vector2(0, -40), Vector2.zero);
             float rx = 0;
             AddRight(row, "Open Terminal", ref rx, 128, () => _openTerminal(), true);
-            AddRight(row, "?", ref rx, 30, () => { if (_openMenu != null) _openMenu(4); });
+            AddRight(row, "?", ref rx, 30, () => { if (_openMenu != null) _openMenu(2); });
             AddRight(row, "Photo", ref rx, 54, () => { if (OnPhoto != null) OnPhoto(); });
             _soundButton = AddRight(row, "Sound", ref rx, 58, () => { if (OnSound != null) OnSound(); _dirty = true; });
             if (_openMenu != null) AddRight(row, "Game", ref rx, 56, () => _openMenu(0));

@@ -870,56 +870,120 @@ namespace TradingEmpire.Terminal
             int d = inst.Digits;
             if (_tab == 0) PositionRows(s, d);
             else if (_tab == 1) OrderRows(s, d);
-            else if (_tab == 2) _tabBody.text = History(s);
+            else if (_tab == 2) HistoryRows(s);
             else if (_tab == 3) JournalTab(s);
-            else _tabBody.text = Stats(s);
+            else StatsCards(s);
         }
+
+        const float RowH = 26f;
+
+        /// <summary>A table with a header row and striped rows. Columns are pixel widths; the cells take rich text; the last column can hold a button.</summary>
+        void BuildTable(string[] heads, float[] widths, List<string[]> rows, Action<int, RectTransform> lastCell = null, float lastW = 0f)
+        {
+            float x = 0;
+            for (int c = 0; c < heads.Length; c++)
+            {
+                var h = Ui.Label(_positionRows, heads[c], 10, Theme.Dim, c == 0 ? TextAnchor.MiddleLeft : TextAnchor.MiddleRight, false, true);
+                Ui.Place(h.rectTransform, new Vector2(0, 1), new Vector2(0, 1), new Vector2(x + 8, -RowH), new Vector2(x + widths[c] - 8, 0));
+                _rows.Add(h.gameObject);
+                x += widths[c];
+            }
+            float total = x + lastW;
+            for (int r = 0; r < rows.Count; r++)
+            {
+                float top = -(RowH + 2 + r * (RowH + 2));
+                var bg = Ui.Box(_positionRows, "TableRow", r % 2 == 0 ? new Color(1f, 1f, 1f, 0.045f) : new Color(1f, 1f, 1f, 0.02f));
+                Ui.Rounded(bg, 5f);
+                Ui.Place(bg.rectTransform, new Vector2(0, 1), new Vector2(0, 1), new Vector2(0, top - RowH), new Vector2(total, top));
+                _rows.Add(bg.gameObject);
+                float cx = 0;
+                for (int c = 0; c < widths.Length; c++)
+                {
+                    var t = Ui.Label(bg.transform, rows[r][c], 12, Theme.Text, c == 0 ? TextAnchor.MiddleLeft : TextAnchor.MiddleRight, c > 0, c == 0);
+                    Ui.Place(t.rectTransform, new Vector2(0, 0), new Vector2(0, 1), new Vector2(cx + 8, 0), new Vector2(cx + widths[c] - 8, 0));
+                    cx += widths[c];
+                }
+                if (lastCell != null)
+                {
+                    var holder = Ui.Rect(bg.transform, "Cell");
+                    Ui.Place(holder, new Vector2(0, 0), new Vector2(0, 1), new Vector2(cx + 4, 2), new Vector2(cx + lastW - 4, -2));
+                    lastCell(r, holder);
+                }
+            }
+        }
+
+        static string Side(Direction d) { return d == Direction.Buy ? "<color=#26c295>BUY</color>" : "<color=#ed5259>SELL</color>"; }
+        static string Money2(Money m) { return "<color=" + (m.Cents >= 0 ? "#26c295" : "#ed5259") + ">" + m.ToSignedString() + "</color>"; }
 
         void PositionRows(SessionState s, int digits)
         {
             if (s.Positions.Count == 0) { _tabBody.alignment = TextAnchor.MiddleCenter; _tabBody.text = "<color=#8594ad>No open positions.\nPlan a trade with Long or Short.</color>"; return; }
-            _tabBody.text = Pad("SIDE", 6) + Pad("SIZE", 7) + Pad("ENTRY", 12) + Pad("SL", 12) + Pad("TP", 12) + "P/L";
-            int row = 0;
-            foreach (var pv in s.Positions.Take(7))
+            var list = s.Positions.Take(20).ToList();
+            var rows = list.Select(pv =>
             {
                 var p = pv.Position;
-                string color = pv.Unrealized.Cents >= 0 ? "#26c295" : "#ed5259";
-                var line = Ui.Label(_positionRows, Pad(p.Direction == Direction.Buy ? "BUY" : "SELL", 6) + Pad(Units.FormatLots(p.Lots), 7)
-                    + Pad(Units.FormatPrice(p.EntryPrice, digits), 12) + Pad(p.StopLoss.HasValue ? Units.FormatPrice(p.StopLoss.Value, digits) : "-", 12)
-                    + Pad(p.TakeProfit.HasValue ? Units.FormatPrice(p.TakeProfit.Value, digits) : "-", 12) + "<color=" + color + ">" + pv.Unrealized.ToSignedString() + "</color>", 12, Theme.Text, TextAnchor.UpperLeft, true);
-                Ui.Place(line.rectTransform, new Vector2(0, 1), new Vector2(1, 1), new Vector2(0, -22 - (row + 1) * 24), new Vector2(-110, -(row + 1) * 24 + 2));
-                string id = p.Id;
-                var close = Ui.Button(_positionRows, "Close", () => Session.ClosePosition(id), Theme.PanelAlt, 11);
-                Ui.Place((RectTransform)close.transform, new Vector2(1, 1), new Vector2(1, 1), new Vector2(-96, -22 - (row + 1) * 24), new Vector2(-6, -(row + 1) * 24 + 2));
-                _rows.Add(line.gameObject); _rows.Add(close.gameObject);
-                row++;
-            }
+                return new[] { Side(p.Direction), Units.FormatLots(p.Lots), Units.FormatPrice(p.EntryPrice, digits), p.StopLoss.HasValue ? Units.FormatPrice(p.StopLoss.Value, digits) : "-",
+                    p.TakeProfit.HasValue ? Units.FormatPrice(p.TakeProfit.Value, digits) : "-", Money2(pv.Unrealized) };
+            }).ToList();
+            BuildTable(new[] { "SIDE", "SIZE", "ENTRY", "STOP-LOSS", "TAKE-PROFIT", "P/L" }, new[] { 90f, 90f, 120f, 120f, 120f, 120f }, rows, (i, holder) =>
+            {
+                string id = list[i].Position.Id;
+                var close = Ui.Button(holder, "Close", () => Session.ClosePosition(id), Theme.PanelAlt, 11);
+                Ui.Stretch((RectTransform)close.transform);
+                Ui.Rounded((Image)close.targetGraphic, 5f);
+            }, 100f);
         }
 
         void OrderRows(SessionState s, int digits)
         {
-            if (s.Pending.Count == 0) { _tabBody.text = "<color=#8594ad>No resting orders. Limit and stop orders appear here.</color>"; return; }
-            var sb = new StringBuilder(Pad("SIDE", 6) + Pad("TYPE", 7) + Pad("SIZE", 7) + Pad("PRICE", 12) + Pad("SL", 12) + "TP\n");
-            foreach (var o in s.Pending.Take(8))
-                sb.Append(Pad(o.Direction == Direction.Buy ? "BUY" : "SELL", 6) + Pad(o.Kind == PendingKind.Limit ? "LIMIT" : "STOP", 7) + Pad(Units.FormatLots(o.Lots), 7)
-                    + Pad(Units.FormatPrice(o.Price, digits), 12) + Pad(o.StopLoss.HasValue ? Units.FormatPrice(o.StopLoss.Value, digits) : "-", 12)
-                    + (o.TakeProfit.HasValue ? Units.FormatPrice(o.TakeProfit.Value, digits) : "-") + "\n");
-            _tabBody.text = sb.ToString();
+            if (s.Pending.Count == 0) { _tabBody.alignment = TextAnchor.MiddleCenter; _tabBody.text = "<color=#8594ad>No resting orders.\nLimit and stop orders appear here.</color>"; return; }
+            var rows = s.Pending.Take(20).Select(o => new[] { Side(o.Direction), o.Kind == PendingKind.Limit ? "LIMIT" : "STOP", Units.FormatLots(o.Lots), Units.FormatPrice(o.Price, digits),
+                o.StopLoss.HasValue ? Units.FormatPrice(o.StopLoss.Value, digits) : "-", o.TakeProfit.HasValue ? Units.FormatPrice(o.TakeProfit.Value, digits) : "-" }).ToList();
+            BuildTable(new[] { "SIDE", "TYPE", "SIZE", "PRICE", "STOP-LOSS", "TAKE-PROFIT" }, new[] { 90f, 90f, 90f, 120f, 120f, 120f }, rows);
         }
 
-        static string History(SessionState s)
+        void HistoryRows(SessionState s)
         {
-            if (s.Closed.Count == 0) return "<color=#8594ad>No closed trades yet.</color>";
-            var sb = new StringBuilder(Pad("SIDE", 6) + Pad("SIZE", 7) + Pad("ENTRY", 12) + Pad("EXIT", 12) + Pad("REASON", 13) + "NET\n");
-            foreach (var p in s.Closed.AsEnumerable().Reverse().Take(8))
+            var closed = s.Closed.AsEnumerable().Reverse().Where(p => p.Exit != null).Take(20).ToList();
+            if (closed.Count == 0) { _tabBody.alignment = TextAnchor.MiddleCenter; _tabBody.text = "<color=#8594ad>No closed trades yet.</color>"; return; }
+            var rows = closed.Select(p =>
             {
-                if (p.Exit == null) continue;
                 int d = Instruments.DigitsFor(p.Symbol, 5);
-                string color = p.Exit.Net.Cents >= 0 ? "#26c295" : "#ed5259";
-                sb.Append(Pad(p.Direction == Direction.Buy ? "BUY" : "SELL", 6) + Pad(Units.FormatLots(p.Lots), 7) + Pad(Units.FormatPrice(p.EntryPrice, d), 12)
-                    + Pad(Units.FormatPrice(p.Exit.Price, d), 12) + Pad(Reason(p.Exit.Reason), 13) + "<color=" + color + ">" + p.Exit.Net.ToSignedString() + "</color>\n");
+                return new[] { Side(p.Direction), Units.FormatLots(p.Lots), Units.FormatPrice(p.EntryPrice, d), Units.FormatPrice(p.Exit.Price, d), Reason(p.Exit.Reason), Money2(p.Exit.Net) };
+            }).ToList();
+            BuildTable(new[] { "SIDE", "SIZE", "ENTRY", "EXIT", "CLOSED BY", "NET" }, new[] { 90f, 90f, 120f, 120f, 130f, 120f }, rows);
+        }
+
+        /// <summary>The statistics as small cards, like the account figures.</summary>
+        void StatsCards(SessionState s)
+        {
+            var t = s.Stats;
+            if (t.TotalTrades == 0) { _tabBody.alignment = TextAnchor.MiddleCenter; _tabBody.text = "<color=#8594ad>Statistics appear after your first closed trade.</color>"; return; }
+            Func<double?, string> pct = v => v.HasValue ? (v.Value * 100).ToString("0.0", CultureInfo.InvariantCulture) + "%" : "-";
+            Func<double?, string> num = v => v.HasValue ? v.Value.ToString("0.00", CultureInfo.InvariantCulture) : "-";
+            var items = new List<string[]>
+            {
+                new[] { "TRADES", t.TotalTrades.ToString() }, new[] { "WINS", t.Wins.ToString() }, new[] { "LOSSES", t.Losses.ToString() }, new[] { "WIN RATE", pct(t.WinRate) },
+                new[] { "NET P/L", Money2(t.NetPnl) }, new[] { "AVG R", num(t.AvgRMultiple) },
+                new[] { "GROSS PROFIT", t.GrossProfit.ToString() }, new[] { "GROSS LOSS", t.GrossLoss.ToString() },
+                new[] { "AVG WIN", t.AvgWin.HasValue ? t.AvgWin.Value.ToString() : "-" }, new[] { "AVG LOSS", t.AvgLoss.HasValue ? t.AvgLoss.Value.ToString() : "-" },
+                new[] { "PROFIT FACTOR", num(t.ProfitFactor) }, new[] { "MAX DRAWDOWN", t.MaxDrawdown.ToString() },
+            };
+            float W = _positionRows.rect.width < 300 ? 1180f : _positionRows.rect.width;
+            int cols = Mathf.Clamp((int)(W / 170f), 3, 6);
+            float cw = W / cols;
+            for (int i = 0; i < items.Count; i++)
+            {
+                int col = i % cols, row = i / cols;
+                var card = Ui.Box(_positionRows, "StatCard", Theme.PanelAlt);
+                Ui.Rounded(card, 6f);
+                Ui.Place(card.rectTransform, new Vector2(0, 1), new Vector2(0, 1), new Vector2(col * cw, -(row * 52) - 48), new Vector2(col * cw + cw - 6, -(row * 52)));
+                var cap = Ui.Label(card.transform, items[i][0], 9, Theme.Dim, TextAnchor.MiddleLeft, false, true);
+                Ui.Place(cap.rectTransform, new Vector2(0, 1), new Vector2(1, 1), new Vector2(8, -17), new Vector2(-4, -3));
+                var v = Ui.Label(card.transform, items[i][1], 14, Theme.Text, TextAnchor.MiddleLeft, true, true);
+                Ui.Place(v.rectTransform, new Vector2(0, 0), new Vector2(1, 1), new Vector2(8, 2), new Vector2(-4, -17));
+                _rows.Add(card.gameObject);
             }
-            return sb.ToString();
         }
 
         static string Reason(CloseReason r)
@@ -927,17 +991,6 @@ namespace TradingEmpire.Terminal
             return r == CloseReason.StopLoss ? "stop-loss" : r == CloseReason.TakeProfit ? "take-profit" : r == CloseReason.StopOut ? "stop-out" : "manual";
         }
 
-        static string Stats(SessionState s)
-        {
-            var t = s.Stats;
-            if (t.TotalTrades == 0) return "<color=#8594ad>Statistics appear after your first closed trade.</color>";
-            Func<double?, string> pct = v => v.HasValue ? (v.Value * 100).ToString("0.0", CultureInfo.InvariantCulture) + "%" : "-";
-            Func<double?, string> num = v => v.HasValue ? v.Value.ToString("0.00", CultureInfo.InvariantCulture) : "-";
-            return "Trades " + t.TotalTrades + "   Wins " + t.Wins + "   Losses " + t.Losses + "   Win rate " + pct(t.WinRate)
-                + "\nNet " + t.NetPnl.ToSignedString() + "   Gross profit " + t.GrossProfit + "   Gross loss " + t.GrossLoss
-                + "\nAvg win " + (t.AvgWin.HasValue ? t.AvgWin.Value.ToString() : "-") + "   Avg loss " + (t.AvgLoss.HasValue ? t.AvgLoss.Value.ToString() : "-")
-                + "   Profit factor " + num(t.ProfitFactor) + "   Max drawdown " + t.MaxDrawdown + "   Avg R " + num(t.AvgRMultiple);
-        }
 
         static string Pad(string s, int width) { return s.Length >= width ? s + " " : s.PadRight(width); }
     }
