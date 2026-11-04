@@ -758,5 +758,59 @@ namespace TradingEmpire.PlayModeTests
             Assert.IsTrue(new SaveManager(w2, new MemorySaveStorage()).Import(w.ExportText()).Ok);
             Assert.AreEqual(3.0, w2.Trading.Indicators.Items[0].Width);
         }
+
+        [UnityTest]
+        public IEnumerator Random_chart_work_never_throws_and_the_game_still_saves_and_loads()
+        {
+            _app = GameApp.Create(null, false, true);
+            yield return null;
+            Find("Open Terminal").onClick.Invoke();
+            yield return null;
+            var s = _app.World.Trading;
+            for (int i = 0; i < 400; i++) s.Step();
+            var chart = _app.Terminal.Chart;
+            string[] tools = { null, "measure", "trend", "ray", "extline", "arrow", "hline", "hray", "vline", "channel", "regression", "pitchfork", "gannfan", "fib", "fibext", "fibchannel", "fibtime", "fibfan", "fibarcs", "rect", "ellipse", "triangle", "text", "pricelabel", "up", "down", "long", "short" };
+            string[] inds = Indicators.All.Select(d => d.Id).ToArray();
+            long[] tfs = Timeframes.Available(s.State.NativeMs).Select(t => t.Ms).ToArray();
+            foreach (int seed in new[] { 1, 7, 99, 314, 2024 })
+            {
+            var rng = new System.Random(seed);
+            for (int round = 0; round < 450; round++)
+            {
+                _app.Terminal.RefreshNow();
+                var g = chart.Graphic;
+                var plot = g.Plot;
+                Vector2 P() { return new Vector2(plot.xMin + plot.width * (float)rng.NextDouble(), plot.yMin + plot.height * (float)rng.NextDouble()); }
+                switch (rng.Next(18))
+                {
+                    case 0: chart.SetTool(tools[rng.Next(tools.Length)]); break;
+                    case 1: case 2: case 3: { var a = P(); chart.PointerDown(a); chart.PointerDrag(P()); chart.PointerUp(P()); break; }
+                    case 4: { var a = P(); chart.PointerDown(a); chart.PointerUp(a); break; }
+                    case 5: s.StartDraft(rng.Next(2) == 0 ? Direction.Buy : Direction.Sell); break;
+                    case 6: s.UpdateDraft(d => { d.StopLoss += rng.Next(-300, 300); if (rng.Next(3) == 0) d.TakeProfit = null; else d.TakeProfit = (d.TakeProfit ?? d.StopLoss) + rng.Next(-300, 300); if (rng.Next(3) == 0) d.Entry = d.StopLoss + rng.Next(-400, 400); d.RiskSizing = rng.Next(2) == 0; d.Lots = rng.Next(0, 400); d.RiskPct = rng.NextDouble() * 120 - 5; }); break;
+                    case 7: s.SubmitDraft(); break;
+                    case 8: s.Indicators.Add(inds[rng.Next(inds.Length)]); break;
+                    case 9: { var items = s.Indicators.Items; if (items.Count > 0) { var c = items[rng.Next(items.Count)]; if (rng.Next(2) == 0) s.Indicators.Remove(c.Id); else s.Indicators.Update(c.Id, x => { foreach (var k in x.Params.Keys.ToList()) x.Params[k] = rng.NextDouble() * 600 - 50; x.Width = rng.NextDouble() * 10; }); } break; }
+                    case 10: { var items = s.Drawings.Items; if (items.Count > 0) { var d = items[rng.Next(items.Count)]; chart.Select(d.Id); if (DrawingKinds.IsFib(d.Kind)) s.Drawings.Update(d.Id, x => { var lv = DrawingKinds.FibLevelDefs(x); if (rng.Next(3) == 0 && lv.Count > 0) lv.RemoveAt(rng.Next(lv.Count)); else lv.Add(new DrawingKinds.FibLevel { V = rng.NextDouble() * 10 - 3, On = rng.Next(2) == 0 }); DrawingKinds.SetFibLevels(x, lv); }); else if (rng.Next(3) == 0) chart.DeleteSelected(); } break; }
+                    case 11: s.SetTimeframe(tfs[rng.Next(tfs.Length)]); break;
+                    case 12: for (int k = 0; k < rng.Next(1, 40); k++) s.Step(); break;
+                    case 13: chart.SetAuto(rng.Next(2) == 0); break;
+                    case 14: g.PanBars = rng.Next(0, 300); g.VisibleBars = rng.Next(5, 700); break;
+                    case 15: _app.Terminal.ToggleFull(); break;
+                    case 16: s.CloseAll(); break;
+                    default: s.Restart(); break;
+                }
+                if (round % 5 == 0) yield return null;
+                if (round % 150 == 0)
+                {
+                    var json = Json.Serialize(SaveCodec.Capture(_app.World, DateTimeOffset.UtcNow, false));
+                    Assert.IsTrue(SaveCodec.Parse(json).Ok, "the save is not valid after random chart work (seed " + seed + ", round " + round + ")");
+                }
+            }
+            }
+            var final = Json.Serialize(SaveCodec.Capture(_app.World, DateTimeOffset.UtcNow, false));
+            var parsed = SaveCodec.Parse(final);
+            Assert.IsTrue(parsed.Ok, parsed.Error);
+        }
     }
 }

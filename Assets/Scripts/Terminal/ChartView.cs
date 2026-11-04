@@ -457,6 +457,8 @@ namespace TradingEmpire.Terminal
 
         void Update()
         {
+            // letting go of the mouse outside the chart must still end a drag (otherwise the price range could stay frozen)
+            if (Input.GetMouseButtonUp(0) && (_panning || _axisDrag || _dragDraft != null || _dragHandle >= 0 || _moving)) PointerUp(LocalMouse());
             LayoutTools();
             if (_propsDirty) RefreshProps();
             if (!_hover) return;

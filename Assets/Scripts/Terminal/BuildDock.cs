@@ -115,8 +115,12 @@ namespace TradingEmpire.Terminal
             if (_dirty) { _dirty = false; Refresh(); }
         }
 
+        /// <summary>Set by the HUD: number keys only place buildings while the city has the keyboard (not under a menu, in photo mode or in the terminal).</summary>
+        public Func<bool> KeysActive;
+
         void HandleHotkeys()
         {
+            if (KeysActive != null && !KeysActive()) return;
             var es = UnityEngine.EventSystems.EventSystem.current;
             var sel = es != null ? es.currentSelectedGameObject : null;
             if (sel != null && sel.GetComponent<InputField>() != null) return;

@@ -209,10 +209,11 @@ namespace TradingEmpire.Terminal
             {
                 var o = _lit[i];
                 if (o == null) { _lit.RemoveAt(i); continue; }
-                if (!wanted.Contains(o.GetComponent<Graphic>())) { Ui.Kill(o); _lit.RemoveAt(i); }
+                if (!wanted.Contains(o.GetComponent<Graphic>()) || o.GetComponent<Graphic>() == null) { Ui.Kill(o); _lit.RemoveAt(i); }
             }
             foreach (var g in wanted)
             {
+                if (g == null) continue; // destroyed since the list was made
                 var o = g.GetComponent<Outline>();
                 if (o == null || !_lit.Contains(o)) { if (o == null) o = g.gameObject.AddComponent<Outline>(); _lit.Add(o); }
                 o.effectDistance = new Vector2(2.5f, 2.5f);

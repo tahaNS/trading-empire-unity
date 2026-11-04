@@ -167,6 +167,7 @@ namespace TradingEmpire.Terminal
             _landButton = AddRight(row, "Land", ref rx, 210, () => City.ExpandLand());
 
             _dock = BuildDock.Build(root, City);
+            _dock.KeysActive = () => View != null && View.Interactive && !View.Photo;
             BuildInspector(root);
             BuildTransferPanel(root);
             BuildPolicyPanel(root);
@@ -519,7 +520,7 @@ namespace TradingEmpire.Terminal
             var es = UnityEngine.EventSystems.EventSystem.current;
             var sel = es != null ? es.currentSelectedGameObject : null;
             bool typing = sel != null && sel.GetComponent<InputField>() != null;
-            if (Input.GetKeyDown(KeyCode.Space) && !typing)
+            if (Input.GetKeyDown(KeyCode.Space) && !typing && View != null && View.Interactive && !View.Photo)
             {
                 if (_world.Clock.Speed > 0) { _speedBeforePause = _world.Clock.Speed; _world.Clock.SetSpeed(0); }
                 else _world.Clock.SetSpeed(_speedBeforePause > 0 ? _speedBeforePause : 1);
