@@ -30,6 +30,13 @@ namespace TradingEmpire.Terminal
         readonly List<Button> _tfButtons = new List<Button>();
         readonly List<Button> _tabButtons = new List<Button>();
         RectTransform _tfRow, _tabContent, _positionRows, _loadPopover;
+        InputField _utcOffset;
+
+        double ParseOffsetHours()
+        {
+            double h;
+            return _utcOffset != null && double.TryParse((_utcOffset.text ?? "").Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out h) && h > -15 && h < 15 ? h : 0;
+        }
         InputField _lots, _sl, _tp, _path;
         Button _symbolButton;
         Text _loadMessage;
@@ -645,7 +652,7 @@ namespace TradingEmpire.Terminal
         void BuildLoadPopover(RectTransform root)
         {
             _loadPopover = Ui.Rect(root, "LoadPopover");
-            Ui.Place(_loadPopover, new Vector2(1, 1), new Vector2(1, 1), new Vector2(-520, -250), new Vector2(-12, -86));
+            Ui.Place(_loadPopover, new Vector2(1, 1), new Vector2(1, 1), new Vector2(-520, -280), new Vector2(-12, -86));
             Ui.Panel(_loadPopover, "Bg", new Color(0.09f, 0.12f, 0.17f, 0.99f)).rectTransform.SetAsFirstSibling();
             Ui.Stretch((RectTransform)_loadPopover.Find("Bg"));
 
@@ -668,8 +675,13 @@ namespace TradingEmpire.Terminal
             var go = Ui.Button(_loadPopover, "Load", LoadFromPath, new Color(0.1f, 0.5f, 0.4f), 13);
             Ui.Place((RectTransform)go.transform, new Vector2(0.62f, 1), new Vector2(1, 1), new Vector2(4, -98), new Vector2(-12, -72));
 
+            // the broker's clock: MetaTrader files use server time, so the hours it is ahead of UTC can be typed here
+            var offLabel = Ui.Label(_loadPopover, "Server UTC offset (hours)", 11, Theme.Dim, TextAnchor.MiddleLeft);
+            Ui.Place(offLabel.rectTransform, new Vector2(0, 1), new Vector2(0.62f, 1), new Vector2(12, -130), new Vector2(-4, -106));
+            _utcOffset = Ui.Input(_loadPopover, "0", 13, InputField.ContentType.DecimalNumber);
+            Ui.Place((RectTransform)_utcOffset.transform, new Vector2(0.62f, 1), new Vector2(1, 1), new Vector2(4, -130), new Vector2(-12, -106));
             _loadMessage = Ui.Label(_loadPopover, "", 11, Theme.Dim, TextAnchor.UpperLeft);
-            Ui.Place(_loadMessage.rectTransform, new Vector2(0, 0), new Vector2(1, 1), new Vector2(12, 6), new Vector2(-12, -104));
+            Ui.Place(_loadMessage.rectTransform, new Vector2(0, 0), new Vector2(1, 1), new Vector2(12, 6), new Vector2(-12, -136));
             _loadMessage.horizontalOverflow = HorizontalWrapMode.Wrap;
             _loadPopover.gameObject.SetActive(false);
         }
@@ -688,7 +700,7 @@ namespace TradingEmpire.Terminal
             string name = Path.GetFileName(path);
             var inst = (_symbolChoices[_symbolIndex] == "auto" ? Instruments.Detect(name) : Instruments.Find(_symbolChoices[_symbolIndex])) ?? Session.Instrument;
             Session.BeginLoading();
-            var result = CsvParser.Parse(File.ReadAllText(path), new ParseOptions { Digits = inst.Digits });
+            var result = CsvParser.Parse(File.ReadAllText(path), new ParseOptions { Digits = inst.Digits, Mt5ServerUtcOffsetHours = ParseOffsetHours() });
             var report = new LoadReport { RowsRead = result.RowsRead, RowsRejected = result.RowsRejected, DuplicatesDropped = result.DuplicatesDropped, WasUnsorted = result.WasUnsorted, Errors = result.Errors };
             string wrong = result.Ok ? Instruments.CheckPrices(inst, result.Candles.Select(c => c.Close).ToList()) : null;
             if (!result.Ok) { Session.Fail(result.Fatal ?? "Could not read the file.", report); _loadMessage.text = result.Fatal; }

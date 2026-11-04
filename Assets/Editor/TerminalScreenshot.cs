@@ -80,8 +80,9 @@ namespace TradingEmpire.EditorTools
             // the inspector and the transfer panel
             w.City.Select(w.City.State.Buildings[0].Id);
             var hud = app.CityHud;
-            hud.transform.Find("TransferPanel").gameObject.SetActive(true);
             Shot(app, cam, rt, prefix + "-city-panels.png");
+            hud.transform.Find("TransferPanel").gameObject.SetActive(true);
+            Shot(app, cam, rt, prefix + "-city-finances.png");
 
             hud.transform.Find("TransferPanel").gameObject.SetActive(false);
             hud.transform.Find("ProgressPanel").gameObject.SetActive(true);
@@ -181,7 +182,14 @@ namespace TradingEmpire.EditorTools
             s.CancelDraft();
             app.Terminal.Guide.Show(true);
             Shot(app, cam, rt, prefix + "-guide.png");
+            app.Terminal.Guide.SelectTab(1);
+            Shot(app, cam, rt, prefix + "-guide-draw.png");
+            app.Terminal.Guide.SelectTab(2);
+            Shot(app, cam, rt, prefix + "-guide-data.png");
             app.Terminal.Guide.Show(false);
+            app.Terminal.ShowLoadPopover(true);
+            Shot(app, cam, rt, prefix + "-load-data.png");
+            app.Terminal.ShowLoadPopover(false);
 
             // the guided first trade
             app.Tutorial.StartTutorial();
@@ -201,6 +209,11 @@ namespace TradingEmpire.EditorTools
             s.Journal.Set(JournalStore.KeyOf(closed[1]), "Chased it after missing the move.", new[] { "FOMO", "Chased price" }, 2);
             app.Terminal.SelectTab(3);
             Shot(app, cam, rt, prefix + "-journal.png");
+            app.Terminal.SelectTab(4);
+            Shot(app, cam, rt, prefix + "-stats.png");
+            app.Terminal.SelectTab(2);
+            Shot(app, cam, rt, prefix + "-history.png");
+            app.Terminal.SelectTab(3);
             scaler.scaleFactor = 1.35f;
             app.Terminal.SelectTab(3);
             Shot(app, cam, rt, prefix + "-journal-large.png");
@@ -235,6 +248,8 @@ namespace TradingEmpire.EditorTools
             if (app.TerminalOpen) app.Terminal.RefreshNow();
             Canvas.ForceUpdateCanvases();
             if (app.TerminalOpen) app.Terminal.RefreshNow(); else app.CityHud.RefreshNow();
+            // pictures for the README and the trailer: no leftover notification bars over the chart
+            foreach (var tr in UnityEngine.Object.FindObjectsByType<Transform>(FindObjectsInactive.Include, FindObjectsSortMode.None)) if (tr.name == "Toast" || (tr.name == "Goal" && app.CityHud.PanelOpen)) tr.gameObject.SetActive(false);
             Canvas.ForceUpdateCanvases();
             cam.Render();
             var prev = RenderTexture.active;

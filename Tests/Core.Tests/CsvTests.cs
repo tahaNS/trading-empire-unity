@@ -137,3 +137,20 @@ public class CsvTests
         Assert.Equal(150123, r.Candles[0].Open);
     }
 }
+
+public class SampleDataTests
+{
+    [Fact]
+    public void The_sample_file_in_the_docs_loads_as_EUR_USD()
+    {
+        string dir = System.AppContext.BaseDirectory;
+        string path = null;
+        while (dir != null && path == null) { var p = System.IO.Path.Combine(dir, "docs", "sample-data", "EURUSD_M15_synthetic_example.csv"); if (System.IO.File.Exists(p)) path = p; else dir = System.IO.Directory.GetParent(dir)?.FullName; }
+        Assert.NotNull(path);
+        var r = CsvParser.Parse(System.IO.File.ReadAllText(path), new ParseOptions { Digits = 5 });
+        Assert.True(r.Ok, r.Fatal);
+        Assert.True(r.Candles.Count > 900);
+        Assert.Equal(0, r.RowsRejected);
+        Assert.Null(Instruments.CheckPrices(Instruments.EURUSD, r.Candles.Select(c => c.Close).ToList()));
+    }
+}
