@@ -8,7 +8,7 @@ This is the Unity version (Unity 6, `6000.2.13f1`). It is a full port of the bro
 
 [![The city](docs/screenshots/city.jpg)](docs/trailer/Trading-Empire-Unity-trailer.mp4)
 
-> **Trailer:** [watch the 70 second trailer](docs/trailer/Trading-Empire-Unity-trailer.mp4) (MP4, made from the pictures in this page).
+> **Trailer:** [watch the 70 second trailer](docs/trailer/Trading-Empire-Unity-trailer.mp4) (MP4, recorded from the real game).
 
 ## Contents
 1. [How the game works](#how-the-game-works)
@@ -270,10 +270,9 @@ The **Game** menu has **Save game**, **Load last save**, **Export to a file**, *
 Unity -batchmode -quit -projectPath . -executeMethod TradingEmpire.EditorTools.BuildMac.BuildCli -buildOutput Builds/macOS
 ```
 
-**Pictures and trailer:** the screenshots in `docs/screenshots` are rendered by the game itself:
+**Pictures and trailer:** the screenshots in `docs/screenshots` are rendered by the game itself. The trailer is recorded from the real game: `"Trading Empire.app/Contents/MacOS/Trading Empire" -te-trailer frames` plays a scripted tour and writes every frame, then ffmpeg joins them with `docs/trailer/make_music.py` music.
 ```bash
 Unity -batchmode -projectPath . -executeMethod TradingEmpire.EditorTools.TerminalScreenshot.CaptureCli -shot out
-python3 docs/trailer/make_trailer.py /path/to/ffmpeg   # builds docs/trailer/Trading-Empire-Unity-trailer.mp4
 ```
 
 **Tests (no Unity needed for the rules):**

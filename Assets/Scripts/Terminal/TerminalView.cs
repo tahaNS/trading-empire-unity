@@ -95,6 +95,9 @@ namespace TradingEmpire.Terminal
 
         public void OpenChallengeList() { ToggleChallengeList(true); }
 
+        /// <summary>The path field of the Load data window (used by the trailer recorder).</summary>
+        public InputField LoadPathInput { get { return _path; } }
+
         public void ShowLoadPopover(bool show) { _loadPopover.gameObject.SetActive(show); }
         void OnDestroy() { if (Session != null) Session.Changed -= MarkDirty; }
 

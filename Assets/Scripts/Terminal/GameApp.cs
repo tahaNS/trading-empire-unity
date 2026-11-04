@@ -41,9 +41,14 @@ namespace TradingEmpire.Terminal
         {
             if (FindFirstObjectByType<GameApp>() != null) return;
             // a debug aid: "-te-demo" shows a ready-made town and never touches your save
-            bool demo = Array.IndexOf(Environment.GetCommandLineArgs(), "-te-demo") >= 0;
-            var app = Create(null, !demo, demo);
+            var args = Environment.GetCommandLineArgs();
+            bool demo = Array.IndexOf(args, "-te-demo") >= 0;
+            int trailerAt = Array.IndexOf(args, "-te-trailer");
+            bool trailer = trailerAt >= 0 && trailerAt + 1 < args.Length;
+            var app = Create(null, !demo && !trailer, demo || trailer);
             if (demo) { DemoCity.Populate(app.World); app.World.Clock.SetSpeed(1); }
+            // a recording aid: "-te-trailer folder" plays a scripted tour and writes every frame to the folder
+            if (trailer) TrailerDirector.Begin(app, args[trailerAt + 1]);
         }
 
         /// <summary>
