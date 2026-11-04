@@ -27,7 +27,6 @@ namespace TradingEmpire.Terminal
         bool _open = true;
         bool _dirty = true;
         float _lastWidth;
-        int _lastVisible = -1;
 
         const int Columns = 6;
         const float CardH = 64f, Gap = 6f, Margin = 12f;
